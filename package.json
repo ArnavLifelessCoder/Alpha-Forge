@@ -1,0 +1,35 @@
+{
+  "name": "synthetic-bull",
+  "version": "1.0.0",
+  "description": "Full-Stack Exchange Simulator & Algorithmic Trading Terminal",
+  "private": true,
+  "scripts": {
+    "start": "docker-compose up",
+    "stop": "docker-compose down",
+    "build": "docker-compose build",
+    "rebuild": "docker-compose down && docker-compose build --no-cache && docker-compose up",
+    "logs": "docker-compose logs -f",
+    "logs:backend": "docker-compose logs -f backend",
+    "logs:frontend": "docker-compose logs -f frontend",
+    "clean": "docker-compose down -v && docker system prune -f",
+    "dev:backend": "cd backend && npm install && npm run dev",
+    "dev:frontend": "cd frontend && npm install && npm run dev",
+    "test:backend": "cd backend && npm test",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "trading",
+    "exchange",
+    "matching-engine",
+    "websocket",
+    "react",
+    "typescript",
+    "docker"
+  ],
+  "author": "IIT Kharagpur Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/synthetic-bull"
+  }
+}
