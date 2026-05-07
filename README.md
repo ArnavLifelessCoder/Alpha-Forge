@@ -1,4 +1,4 @@
-# 🚀 Project Synthetic-Bull
+# Project Synthetic-Bull
 
 **A production-grade, real-time simulated cryptocurrency/stock exchange with integrated web trading terminal and automated quantitative trading bots.**
 
@@ -12,7 +12,7 @@ Built for the **NextBull × IIT Kharagpur Open Soft Competition 2026**
 
 ---
 
-## ⚡ Quick Start (2 Minutes)
+##  Quick Start (2 Minutes)
 
 ```bash
 # Clone or extract the project
@@ -22,8 +22,8 @@ cd synthetic-bull
 docker-compose up
 
 # Open your browser
-# 🌐 Frontend: http://localhost:3000
-# 🔌 Backend: http://localhost:8080
+#  Frontend: http://localhost:3000
+#  Backend: http://localhost:8080
 ```
 
 **That's it!** You now have a fully functional exchange simulator running with:
@@ -35,40 +35,40 @@ docker-compose up
 
 ---
 
-## 🎯 Features
+##  Features
 
-### Module 1: Core Matching Engine ✅
+### Module 1: Core Matching Engine 
 - **High-Performance Order Book**: In-memory Limit Order Book with Price-Time priority
 - **Sub-millisecond Matching**: < 1ms order execution latency
 - **Order Types**: Limit, Market, and Cancel orders
 - **Partial Fills**: Full support for partial order execution
 
-### Module 2: Synthetic Market Generator ✅
+### Module 2: Synthetic Market Generator 
 - **GBM Price Simulation**: Geometric Brownian Motion for realistic price movements
 - **Continuous Liquidity**: 75 orders/second synthetic market activity
 - **No External Data**: 100% self-contained market simulation
 - **Realistic Spreads**: 10 basis points (0.1%) bid-ask spread
 
-### Module 3: Real-Time Web Terminal ✅
+### Module 3: Real-Time Web Terminal 
 - **Live Candlestick Charts**: 5-second interval OHLCV candles
 - **Order Book Visualization**: Real-time bid/ask depth display
 - **Order Entry Panel**: Intuitive limit and market order submission
 - **Portfolio Widget**: Live P&L tracking with position management
 - **WebSocket Streaming**: < 100ms latency for all updates
 
-### Module 4: Trading Bots (Optional) ✅
+### Module 4: Trading Bots (Optional) 
 - **Market Maker Bot**: Provides liquidity with inventory management
 - **Alpha Bot**: Directional trading using Moving Average Crossover
 - **Automated Execution**: Connects via WebSocket for real-time trading
 
-### Additional Features ✅
+### Additional Features 
 - **Portfolio Management**: Real-time P&L calculation (realized + unrealized)
 - **Short Selling**: Full support for short positions
 - **Trade History**: Recent trade execution log
 - **System Statistics**: Live metrics dashboard
 - **Docker Deployment**: One-command launch with docker-compose
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -92,14 +92,14 @@ docker-compose up
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 📦 Tech Stack
+##  Tech Stack
 
 - **Backend**: Node.js, TypeScript, Express, ws (WebSocket)
 - **Frontend**: React, TypeScript, Vite, Recharts, TailwindCSS
 - **Deployment**: Docker, Docker Compose
 - **Testing**: Jest, React Testing Library
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - Docker & Docker Compose
@@ -131,7 +131,7 @@ npm install
 npm run dev
 ```
 
-## 📊 System Parameters
+##  System Parameters
 
 - **Initial Capital**: $100,000 (all users and bots)
 - **Market Generator**: 50-100 orders/second
@@ -139,26 +139,16 @@ npm run dev
 - **WebSocket Update Rate**: Real-time (< 100ms latency)
 - **Short Selling**: Enabled
 
-## 🤖 Trading Bots (Optional)
 
-### Market Maker Bot
-- Provides liquidity by placing limit orders around mid-price
-- Spread: 0.1% - 0.2%
-- Inventory risk management
 
-### Alpha Bot
-- Directional trading using Moving Average Crossover
-- Entry: MA(5) crosses MA(20)
-- Risk management: 2% per trade
-
-## 📈 Performance Metrics
+##  Performance Metrics
 
 - Order matching: < 1ms latency
 - WebSocket throughput: 100+ messages/second
 - Frontend rendering: 60 FPS
 - Memory usage: < 512MB
 
-## 🧪 Testing
+##  Testing
 
 ```bash
 # Backend tests
@@ -170,7 +160,7 @@ cd frontend
 npm test
 ```
 
-## 📝 Project Structure
+##  Project Structure
 
 ```
 synthetic-bull/
@@ -195,13 +185,5 @@ synthetic-bull/
 └── README.md
 ```
 
-## 🎯 Evaluation Criteria Coverage
 
-- ✅ **Backend & Architecture (20%)**: High-performance matching engine with WebSocket stability
-- ✅ **Frontend & UX (50%)**: Responsive terminal with real-time charts and intuitive design
-- ✅ **Quant & Bot Logic (5% Bonus)**: Realistic GBM simulation with profitable trading strategies
-- ✅ **Code Quality & Deployment (20%)**: Clean TypeScript, full Docker support, one-click launch
 
-## 📄 License
-
-MIT License - Built for NEXTBULL X IIT Kharagpur Open Soft Competition 2026
