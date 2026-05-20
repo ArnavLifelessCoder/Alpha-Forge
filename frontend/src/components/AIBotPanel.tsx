@@ -28,6 +28,8 @@ const STRATEGY_INFO: Record<string, { name: string; icon: any; description: stri
   'market_making': { name: 'Market Making', icon: BarChart3, description: 'Spread capture', color: 'text-purple-400' },
 };
 
+const BACKEND = (import.meta as any).env?.VITE_BACKEND_URL || 'https://algo-portal.onrender.com';
+
 export default function AIBotPanel() {
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,7 +37,7 @@ export default function AIBotPanel() {
 
   const fetchStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/bot/status');
+      const response = await fetch(`${BACKEND}/api/bot/status`);
       if (response.ok) {
         const data = await response.json();
         setStatus(data);
@@ -55,7 +57,7 @@ export default function AIBotPanel() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`http://localhost:8080/api/bot/${action}`, { method: 'POST' });
+      const response = await fetch(`${BACKEND}/api/bot/${action}`, { method: 'POST' });
       if (response.ok) {
         await fetchStatus();
       } else {
@@ -75,7 +77,7 @@ export default function AIBotPanel() {
       : [...current, strategy];
 
     try {
-      await fetch('http://localhost:8080/api/bot/strategies', {
+      await fetch(`${BACKEND}/api/bot/strategies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ strategies: updated }),

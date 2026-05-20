@@ -139,5 +139,5 @@ export class WebSocketService {
 }
 
 // Singleton instance
-const WS_URL = (import.meta as any).env?.VITE_WS_URL || 'ws://localhost:8080/ws';
+const WS_URL = (import.meta as any).env?.VITE_WS_URL || 'wss://algo-portal.onrender.com/ws';
 export const wsService = new WebSocketService(WS_URL);

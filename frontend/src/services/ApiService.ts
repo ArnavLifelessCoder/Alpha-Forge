@@ -1,6 +1,6 @@
 import { OrderRequest, Portfolio } from '../types';
 
-const API_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:8080';
+const API_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://algo-portal.onrender.com';
 
 class ApiService {
   async submitOrder(order: OrderRequest & { symbol?: string }): Promise<any> {
