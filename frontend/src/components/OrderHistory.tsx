@@ -46,8 +46,8 @@ export default function OrderHistory({ userId = 'USER_1' }: OrderHistoryProps) {
     wsService.on('order_update', handleOrderUpdate);
     wsService.on('trade', handleOrderUpdate);
 
-    // Poll every 5 seconds
-    const interval = setInterval(fetchOrders, 5000);
+    // Poll every 15 seconds (not critical data)
+    const interval = setInterval(fetchOrders, 15000);
 
     return () => {
       wsService.off('order_update', handleOrderUpdate);

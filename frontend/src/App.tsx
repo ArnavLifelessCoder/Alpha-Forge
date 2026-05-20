@@ -92,7 +92,7 @@ function App() {
         const portfolioData = await apiService.getPortfolio(USER_ID);
         setPortfolio(portfolioData);
       } catch (error) {}
-    }, 2000);
+    }, 10000);
 
     // Refresh stats
     const statsInterval = setInterval(async () => {
@@ -100,7 +100,7 @@ function App() {
         const statsData = await apiService.getStats(currentSymbol);
         setStats(statsData);
       } catch (error) {}
-    }, 5000);
+    }, 15000);
 
     return () => {
       wsService.off('orderbook', handleOrderBook);

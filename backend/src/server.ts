@@ -27,7 +27,16 @@ const symbolEngines: Map<string, { engine: MatchingEngine; generator: MarketGene
 
 // Setup Express app
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    /\.vercel\.app$/,
+    /\.onrender\.com$/,
+  ],
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(compression());
 app.use(express.json());
 
