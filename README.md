@@ -20,6 +20,9 @@ docker-compose up --build
 # Trading Terminal:     http://localhost:3000
 # Analytics Dashboard:  http://localhost:8501
 # Backend API:          http://localhost:8080
+
+#Backend - https://algo-portal-final-1xvi.onrender.com - On Render
+#Frontend - https://algo-portal-rg4ck4qma-arnav-gawade-s-projects.vercel.app/ - On Vercel
 ```
 
 ---
