@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Clock, CheckCircle, RefreshCw } from 'lucide-react';
 import { apiService } from '../services/ApiService';
-import { wsService } from '../services/WebSocketService';
 
 interface OrderHistoryItem {
   id: string;
@@ -38,20 +37,10 @@ export default function OrderHistory({ userId = 'USER_1' }: OrderHistoryProps) {
   useEffect(() => {
     fetchOrders();
 
-    // Listen for order updates
-    const handleOrderUpdate = () => {
-      fetchOrders();
-    };
-
-    wsService.on('order_update', handleOrderUpdate);
-    // Removed trade listener - fires too frequently on hosted backend
-
-    // Poll every 30 seconds
+    // Poll every 30 seconds only - no WebSocket triggers to avoid request floods
     const interval = setInterval(fetchOrders, 30000);
 
     return () => {
-      wsService.off('order_update', handleOrderUpdate);
-      wsService.off('trade', handleOrderUpdate);
       clearInterval(interval);
     };
   }, [userId]);
