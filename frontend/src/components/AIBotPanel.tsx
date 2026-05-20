@@ -28,7 +28,7 @@ const STRATEGY_INFO: Record<string, { name: string; icon: any; description: stri
   'market_making': { name: 'Market Making', icon: BarChart3, description: 'Spread capture', color: 'text-purple-400' },
 };
 
-const BACKEND = (import.meta as any).env?.VITE_BACKEND_URL || 'https://algo-portal.onrender.com';
+const BACKEND = (import.meta as any).env?.VITE_BACKEND_URL || 'https://algo-portal-final-1xvi.onrender.com';
 
 export default function AIBotPanel() {
   const [status, setStatus] = useState<BotStatus | null>(null);
