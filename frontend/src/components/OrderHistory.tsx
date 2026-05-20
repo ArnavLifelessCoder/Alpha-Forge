@@ -44,10 +44,10 @@ export default function OrderHistory({ userId = 'USER_1' }: OrderHistoryProps) {
     };
 
     wsService.on('order_update', handleOrderUpdate);
-    wsService.on('trade', handleOrderUpdate);
+    // Removed trade listener - fires too frequently on hosted backend
 
-    // Poll every 15 seconds (not critical data)
-    const interval = setInterval(fetchOrders, 15000);
+    // Poll every 30 seconds
+    const interval = setInterval(fetchOrders, 30000);
 
     return () => {
       wsService.off('order_update', handleOrderUpdate);

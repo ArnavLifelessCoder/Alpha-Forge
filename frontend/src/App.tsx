@@ -66,7 +66,10 @@ function App() {
     wsService.on('candle', handleCandle);
 
     // Fetch initial data
+    let fetchAttempted = false;
     const fetchInitialData = async () => {
+      if (fetchAttempted) return;
+      fetchAttempted = true;
       try {
         const [candlesData, portfolioData, statsData] = await Promise.all([
           apiService.getCandles(100, currentSymbol),
@@ -74,13 +77,12 @@ function App() {
           apiService.getStats(currentSymbol),
         ]);
 
-        // Handle both array and object responses
         const candlesList = candlesData.candles || candlesData;
         if (Array.isArray(candlesList)) setCandles(candlesList);
         setPortfolio(portfolioData);
         setStats(statsData);
       } catch (error) {
-        console.error('Error fetching initial data:', error);
+        fetchAttempted = false; // allow retry after 10s
       }
     };
 
