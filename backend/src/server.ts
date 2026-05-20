@@ -7,6 +7,8 @@ import { MarketGenerator } from './market/MarketGenerator';
 import { PortfolioManager } from './engine/PortfolioManager';
 import { CandleGenerator } from './market/CandleGenerator';
 import { WebSocketServer } from './websocket/WebSocketServer';
+import { RealMarketDataService } from './market/RealMarketData';
+import { AITradingBot } from './bots/AITradingBot';
 import { OrderType, OrderSide } from './types';
 
 const PORT = process.env.PORT || 8080;
@@ -17,6 +19,11 @@ const matchingEngine = new MatchingEngine();
 const portfolioManager = new PortfolioManager();
 const candleGenerator = new CandleGenerator(5); // 5-second candles
 const marketGenerator = new MarketGenerator(matchingEngine);
+const realMarketData = new RealMarketDataService();
+const aiBot = new AITradingBot();
+
+// Multi-symbol engines
+const symbolEngines: Map<string, { engine: MatchingEngine; generator: MarketGenerator; candleGen: CandleGenerator }> = new Map();
 
 // Setup Express app
 const app = express();
@@ -30,22 +37,79 @@ const server = http.createServer(app);
 // Initialize WebSocket server
 const wsServer = new WebSocketServer(server);
 
-// Setup event handlers
+// Initialize multi-symbol support
+function initializeSymbolEngines() {
+  const symbols = realMarketData.getSupportedSymbols();
+  
+  for (const symbol of symbols) {
+    const engine = new MatchingEngine();
+    const candleGen = new CandleGenerator(5);
+    const generator = new MarketGenerator(engine);
+    
+    const config = realMarketData.getSymbolConfig(symbol);
+    if (config) {
+      generator.setParameters({
+        sigma: config.volatility,
+        ordersPerSecond: 20,
+      });
+    }
+
+    // Setup trade processing for this symbol
+    engine.onTrade((trades) => {
+      trades.forEach(trade => {
+        portfolioManager.processTradeForSymbol(symbol, trade);
+        candleGen.processTrade(trade);
+        // Feed AI bot with trade data
+        aiBot.feedTrade(symbol, trade);
+      });
+
+      wsServer.broadcast({
+        type: 'trade',
+        data: { symbol, trades },
+        timestamp: Date.now(),
+      });
+
+      const orderBook = engine.getOrderBookSnapshot(20);
+      wsServer.broadcast({
+        type: 'orderbook',
+        data: { symbol, ...orderBook },
+        timestamp: Date.now(),
+      });
+    });
+
+    engine.onOrderUpdate((order) => {
+      wsServer.broadcast({
+        type: 'order_update',
+        data: { symbol, ...order },
+        timestamp: Date.now(),
+      });
+    });
+
+    candleGen.onCandle((candle) => {
+      wsServer.broadcast({
+        type: 'candle',
+        data: { symbol, ...candle },
+        timestamp: Date.now(),
+      });
+    });
+
+    symbolEngines.set(symbol, { engine, generator, candleGen });
+  }
+}
+
+// Also keep the default engine for backward compatibility
 matchingEngine.onTrade((trades) => {
-  // Process trades for portfolio updates
   trades.forEach(trade => {
     portfolioManager.processTrade(trade);
     candleGenerator.processTrade(trade);
   });
 
-  // Broadcast trades
   wsServer.broadcast({
     type: 'trade',
     data: trades,
     timestamp: Date.now(),
   });
 
-  // Broadcast updated order book
   const orderBook = matchingEngine.getOrderBookSnapshot(20);
   wsServer.broadcast({
     type: 'orderbook',
@@ -70,8 +134,23 @@ candleGenerator.onCandle((candle) => {
   });
 });
 
+// Broadcast market data updates
+realMarketData.on('prices_updated', (quotes) => {
+  wsServer.broadcast({
+    type: 'market_data',
+    data: quotes,
+    timestamp: Date.now(),
+  });
+
+  // Update portfolio manager with latest prices
+  for (const quote of quotes) {
+    portfolioManager.updateSymbolPrice(quote.symbol, quote.price);
+  }
+});
+
 // Periodic order book broadcast (every 500ms)
 setInterval(() => {
+  // Broadcast default engine order book
   const orderBook = matchingEngine.getOrderBookSnapshot(20);
   wsServer.broadcast({
     type: 'orderbook',
@@ -79,14 +158,23 @@ setInterval(() => {
     timestamp: Date.now(),
   });
 
-  // Update portfolio manager with current mid price
   const midPrice = matchingEngine.getMidPrice();
   if (midPrice) {
     portfolioManager.updateCurrentPrice(midPrice);
   }
+
+  // Broadcast all symbol order books
+  for (const [symbol, { engine }] of symbolEngines) {
+    const symbolOB = engine.getOrderBookSnapshot(20);
+    wsServer.broadcast({
+      type: 'orderbook',
+      data: { symbol, ...symbolOB },
+      timestamp: Date.now(),
+    });
+  }
 }, 500);
 
-// REST API Endpoints
+// =============== REST API Endpoints ===============
 
 /**
  * Health check
@@ -97,32 +185,93 @@ app.get('/health', (_req, res) => {
     timestamp: Date.now(),
     uptime: process.uptime(),
     connections: wsServer.getClientCount(),
+    symbols: realMarketData.getSupportedSymbols().length,
   });
 });
 
 /**
- * Get order book snapshot
+ * Get all supported symbols
+ */
+app.get('/api/symbols', (_req, res) => {
+  const symbols = realMarketData.getSupportedSymbols();
+  const quotes = realMarketData.getAllQuotes();
+  res.json({ symbols, quotes });
+});
+
+/**
+ * Get real-time market data for all symbols
+ */
+app.get('/api/market-data', (_req, res) => {
+  const quotes = realMarketData.getAllQuotes();
+  res.json(quotes);
+});
+
+/**
+ * Get market data for specific symbol
+ */
+app.get('/api/market-data/:symbol', (req, res) => {
+  const symbol = decodeURIComponent(req.params.symbol);
+  const quote = realMarketData.getQuote(symbol);
+  if (!quote) {
+    res.status(404).json({ error: `Symbol ${symbol} not found` });
+    return;
+  }
+  res.json(quote);
+});
+
+/**
+ * Get order book snapshot (supports symbol query param)
  */
 app.get('/api/orderbook', (req, res) => {
   const depth = parseInt(req.query.depth as string) || 20;
+  const symbol = req.query.symbol as string;
+
+  if (symbol) {
+    const symbolData = symbolEngines.get(symbol);
+    if (symbolData) {
+      res.json({ symbol, ...symbolData.engine.getOrderBookSnapshot(depth) });
+      return;
+    }
+  }
+
   const orderBook = matchingEngine.getOrderBookSnapshot(depth);
   res.json(orderBook);
 });
 
 /**
- * Get recent trades
+ * Get recent trades (supports symbol query param)
  */
 app.get('/api/trades', (req, res) => {
   const count = parseInt(req.query.count as string) || 50;
+  const symbol = req.query.symbol as string;
+
+  if (symbol) {
+    const symbolData = symbolEngines.get(symbol);
+    if (symbolData) {
+      res.json({ symbol, trades: symbolData.engine.getRecentTrades(count) });
+      return;
+    }
+  }
+
   const trades = matchingEngine.getRecentTrades(count);
   res.json(trades);
 });
 
 /**
- * Get candles
+ * Get candles (supports symbol query param)
  */
 app.get('/api/candles', (req, res) => {
   const count = parseInt(req.query.count as string) || 100;
+  const symbol = req.query.symbol as string;
+
+  if (symbol) {
+    const symbolData = symbolEngines.get(symbol);
+    if (symbolData) {
+      res.json({ symbol, candles: symbolData.candleGen.getCandles(count) });
+      return;
+    }
+  }
+
   const candles = candleGenerator.getCandles(count);
   res.json(candles);
 });
@@ -137,13 +286,12 @@ app.get('/api/portfolio/:userId', (req, res) => {
 });
 
 /**
- * Submit order
+ * Submit order (supports symbol in body)
  */
 app.post('/api/orders', (req, res) => {
   try {
-    const { userId, type, side, price, quantity } = req.body;
+    const { userId, type, side, price, quantity, symbol } = req.body;
 
-    // Validate request
     if (!userId || !type || !side || !quantity) {
       res.status(400).json({ error: 'Missing required fields' });
       return;
@@ -159,7 +307,7 @@ app.post('/api/orders', (req, res) => {
       return;
     }
 
-    // Check buying power for buy orders
+    // Check buying power
     if (side === OrderSide.BUY && type === OrderType.LIMIT) {
       const requiredCash = price * quantity;
       if (!portfolioManager.hasSufficientBuyingPower(userId, requiredCash)) {
@@ -168,16 +316,29 @@ app.post('/api/orders', (req, res) => {
       }
     }
 
-    // Submit order
-    const result = matchingEngine.submitOrder({
-      userId,
-      type,
-      side,
-      price: type === OrderType.LIMIT ? price : undefined,
-      quantity,
-    });
+    // Route to symbol-specific engine or default
+    let result;
+    if (symbol && symbolEngines.has(symbol)) {
+      const symbolData = symbolEngines.get(symbol)!;
+      result = symbolData.engine.submitOrder({
+        userId,
+        type,
+        side,
+        price: type === OrderType.LIMIT ? price : undefined,
+        quantity,
+      });
+    } else {
+      result = matchingEngine.submitOrder({
+        userId,
+        type,
+        side,
+        price: type === OrderType.LIMIT ? price : undefined,
+        quantity,
+      });
+    }
 
     res.json({
+      symbol: symbol || 'DEFAULT',
       order: result.order,
       trades: result.trades,
       portfolio: portfolioManager.getPortfolioSummary(userId),
@@ -194,14 +355,19 @@ app.post('/api/orders', (req, res) => {
 app.delete('/api/orders/:orderId', (req, res) => {
   try {
     const { orderId } = req.params;
-    const { userId } = req.body;
+    const { userId, symbol } = req.body;
 
     if (!userId) {
       res.status(400).json({ error: 'Missing userId' });
       return;
     }
 
-    const success = matchingEngine.cancelOrder({ orderId, userId });
+    let success = false;
+    if (symbol && symbolEngines.has(symbol)) {
+      success = symbolEngines.get(symbol)!.engine.cancelOrder({ orderId, userId });
+    } else {
+      success = matchingEngine.cancelOrder({ orderId, userId });
+    }
 
     if (success) {
       res.json({ success: true, message: 'Order cancelled' });
@@ -217,19 +383,52 @@ app.delete('/api/orders/:orderId', (req, res) => {
 /**
  * Get engine statistics
  */
-app.get('/api/stats', (_req, res) => {
+app.get('/api/stats', (req, res) => {
+  const symbol = req.query.symbol as string;
+
+  if (symbol && symbolEngines.has(symbol)) {
+    const symbolData = symbolEngines.get(symbol)!;
+    const stats = symbolData.engine.getStats();
+    const midPrice = symbolData.engine.getMidPrice();
+    const bestPrices = symbolData.engine.getBestPrices();
+
+    res.json({
+      symbol,
+      ...stats,
+      midPrice,
+      bestBid: bestPrices.bid,
+      bestAsk: bestPrices.ask,
+      spread: bestPrices.bid && bestPrices.ask ? bestPrices.ask - bestPrices.bid : null,
+      marketGeneratorActive: symbolData.generator.isActive(),
+      wsConnections: wsServer.getClientCount(),
+    });
+    return;
+  }
+
   const stats = matchingEngine.getStats();
   const midPrice = matchingEngine.getMidPrice();
   const bestPrices = matchingEngine.getBestPrices();
 
+  // Aggregate stats
+  let totalOrders = stats.totalOrders;
+  let totalTrades = stats.totalTrades;
+  for (const [, { engine }] of symbolEngines) {
+    const s = engine.getStats();
+    totalOrders += s.totalOrders;
+    totalTrades += s.totalTrades;
+  }
+
   res.json({
     ...stats,
+    totalOrders,
+    totalTrades,
     midPrice,
     bestBid: bestPrices.bid,
     bestAsk: bestPrices.ask,
     spread: bestPrices.bid && bestPrices.ask ? bestPrices.ask - bestPrices.bid : null,
     marketGeneratorActive: marketGenerator.isActive(),
     wsConnections: wsServer.getClientCount(),
+    symbolCount: symbolEngines.size,
   });
 });
 
@@ -241,44 +440,162 @@ app.post('/api/market/control', (req, res) => {
 
   if (action === 'start') {
     marketGenerator.start();
-    res.json({ success: true, message: 'Market generator started' });
+    for (const [symbol, { generator }] of symbolEngines) {
+      const price = realMarketData.getPrice(symbol);
+      generator.startAtPrice(price);
+    }
+    res.json({ success: true, message: 'All market generators started' });
   } else if (action === 'stop') {
     marketGenerator.stop();
-    res.json({ success: true, message: 'Market generator stopped' });
+    for (const { generator } of symbolEngines.values()) {
+      generator.stop();
+    }
+    res.json({ success: true, message: 'All market generators stopped' });
   } else {
     res.status(400).json({ error: 'Invalid action. Use "start" or "stop"' });
   }
 });
 
-// Start server
+/**
+ * Get all user orders (order history)
+ */
+app.get('/api/orders/:userId', (req, res) => {
+  const { userId } = req.params;
+  const allTrades: any[] = [];
+  
+  for (const [symbol, { engine }] of symbolEngines) {
+    const trades = engine.getRecentTrades(100);
+    const userTrades = trades.filter(t => t.buyUserId === userId || t.sellUserId === userId);
+    allTrades.push(...userTrades.map(t => ({ ...t, symbol })));
+  }
+
+  const defaultTrades = matchingEngine.getRecentTrades(100);
+  const userDefaultTrades = defaultTrades.filter(t => t.buyUserId === userId || t.sellUserId === userId);
+  allTrades.push(...userDefaultTrades.map(t => ({ ...t, symbol: 'BTC/USD' })));
+
+  allTrades.sort((a, b) => b.timestamp - a.timestamp);
+  res.json(allTrades.slice(0, 50));
+});
+
+// =============== AI BOT ENDPOINTS ===============
+
+/**
+ * Get AI bot status
+ */
+app.get('/api/bot/status', (_req, res) => {
+  res.json(aiBot.getStatus());
+});
+
+/**
+ * Start AI bot
+ */
+app.post('/api/bot/start', (_req, res) => {
+  aiBot.start();
+  res.json({ success: true, message: 'AI Trading Bot started', status: aiBot.getStatus() });
+});
+
+/**
+ * Stop AI bot
+ */
+app.post('/api/bot/stop', (_req, res) => {
+  aiBot.stop();
+  res.json({ success: true, message: 'AI Trading Bot stopped', status: aiBot.getStatus() });
+});
+
+/**
+ * Pause/Resume AI bot
+ */
+app.post('/api/bot/pause', (_req, res) => {
+  aiBot.pause();
+  res.json({ success: true, message: 'AI Trading Bot paused' });
+});
+
+app.post('/api/bot/resume', (_req, res) => {
+  aiBot.resume();
+  res.json({ success: true, message: 'AI Trading Bot resumed' });
+});
+
+/**
+ * Get AI bot trades
+ */
+app.get('/api/bot/trades', (req, res) => {
+  const count = parseInt(req.query.count as string) || 50;
+  res.json(aiBot.getRecentTrades(count));
+});
+
+/**
+ * Update AI bot strategies
+ */
+app.post('/api/bot/strategies', (req, res) => {
+  const { strategies } = req.body;
+  if (Array.isArray(strategies)) {
+    aiBot.setStrategies(strategies);
+    res.json({ success: true, strategies });
+  } else {
+    res.status(400).json({ error: 'strategies must be an array' });
+  }
+});
+
+// =============== Start Server ===============
+
 server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║        🚀 Synthetic-Bull Exchange Server Started 🚀       ║
+║      🚀 Synthetic Exchange Server v2.0 Started 🚀        ║
 ║                                                           ║
 ║  HTTP Server:       http://localhost:${PORT}              ║
 ║  WebSocket:         ws://localhost:${PORT}/ws             ║
 ║  Health Check:      http://localhost:${PORT}/health       ║
 ║                                                           ║
 ║  Market Generator:  ${MARKET_GENERATOR_ENABLED ? 'ENABLED ' : 'DISABLED'}                        ║
+║  Real Market Data:  ENABLED (CoinGecko)                   ║
+║  Multi-Symbol:      ENABLED                               ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
 
-  // Start market generator if enabled
+  // Initialize multi-symbol engines
+  initializeSymbolEngines();
+
+  // Start real market data
+  realMarketData.start().then(() => {
+    console.log('✅ Real market data service started');
+  });
+
+  // Start market generators if enabled
   if (MARKET_GENERATOR_ENABLED) {
     setTimeout(() => {
       marketGenerator.start();
-      console.log('✅ Market generator started - generating synthetic liquidity');
-    }, 1000);
+      
+      // Start symbol-specific generators
+      for (const [symbol, { generator }] of symbolEngines) {
+        const price = realMarketData.getPrice(symbol);
+        generator.startAtPrice(price);
+      }
+
+      // Register AI bot with all symbol engines
+      for (const [symbol, { engine }] of symbolEngines) {
+        aiBot.registerSymbol(symbol, engine);
+      }
+      // Start AI bot automatically
+      aiBot.start();
+      
+      console.log('✅ All market generators started');
+      console.log('🤖 AI Trading Bot registered with all symbols');
+    }, 2000);
   }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
+  aiBot.stop();
   marketGenerator.stop();
+  realMarketData.stop();
+  for (const { generator } of symbolEngines.values()) {
+    generator.stop();
+  }
   wsServer.close();
   server.close(() => {
     console.log('Server closed');
@@ -288,7 +605,12 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
+  aiBot.stop();
   marketGenerator.stop();
+  realMarketData.stop();
+  for (const { generator } of symbolEngines.values()) {
+    generator.stop();
+  }
   wsServer.close();
   server.close(() => {
     console.log('Server closed');

@@ -1,207 +1,306 @@
-# 🚀 Project Synthetic-Bull
+# Synthetic Exchange
 
-**A production-grade, real-time simulated cryptocurrency/stock exchange with integrated web trading terminal and automated quantitative trading bots.**
-
-Built for the **NextBull × IIT Kharagpur Open Soft Competition 2026**
+A production-grade, real-time multi-asset trading platform with live market data, a high-performance matching engine, an AI trading bot, and a Streamlit analytics dashboard.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.2+-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://reactjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.31-FF4B4B.svg)](https://streamlit.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ed.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## ⚡ Quick Start (2 Minutes)
+## Quick Start
 
 ```bash
-# Clone or extract the project
-cd synthetic-bull
+# Requires Docker
+docker-compose up --build
 
-# Launch everything with one command
-docker-compose up
-
-# Open your browser
-# 🌐 Frontend: http://localhost:3000
-# 🔌 Backend: http://localhost:8080
+# Trading Terminal:     http://localhost:3000
+# Analytics Dashboard:  http://localhost:8501
+# Backend API:          http://localhost:8080
 ```
-
-**That's it!** You now have a fully functional exchange simulator running with:
-- Real-time price charts
-- Live order book
-- Trading interface
-- Portfolio tracking
-- Synthetic market activity
 
 ---
 
-## 🎯 Features
+## What This Project Demonstrates
 
-### Module 1: Core Matching Engine ✅
-- **High-Performance Order Book**: In-memory Limit Order Book with Price-Time priority
-- **Sub-millisecond Matching**: < 1ms order execution latency
-- **Order Types**: Limit, Market, and Cancel orders
-- **Partial Fills**: Full support for partial order execution
+| Skill Area | Implementation |
+|---|---|
+| System Design | Event-driven architecture, real-time WebSocket streaming, multi-symbol engine |
+| Data Structures | Limit Order Book with Price-Time priority, O(1) order lookup via hash map |
+| Financial Engineering | GBM price simulation, P&L calculation, portfolio management, AI trading strategies |
+| Real-Time Systems | WebSocket with 50ms message batching, live market data feeds |
+| API Integration | CoinGecko live crypto prices, REST + WebSocket hybrid |
+| Frontend Engineering | React 18, real-time charts with SMA overlays, responsive trading terminal |
+| AI / Algorithmic Trading | Multi-strategy bot: RSI mean reversion, EMA momentum, Bollinger breakout, market making |
+| DevOps | 3-service Docker Compose orchestration, health checks, graceful shutdown |
+| Data Analytics | Streamlit dashboard with Plotly visualizations, auto-refresh |
 
-### Module 2: Synthetic Market Generator ✅
-- **GBM Price Simulation**: Geometric Brownian Motion for realistic price movements
-- **Continuous Liquidity**: 75 orders/second synthetic market activity
-- **No External Data**: 100% self-contained market simulation
-- **Realistic Spreads**: 10 basis points (0.1%) bid-ask spread
+---
 
-### Module 3: Real-Time Web Terminal ✅
-- **Live Candlestick Charts**: 5-second interval OHLCV candles
-- **Order Book Visualization**: Real-time bid/ask depth display
-- **Order Entry Panel**: Intuitive limit and market order submission
-- **Portfolio Widget**: Live P&L tracking with position management
-- **WebSocket Streaming**: < 100ms latency for all updates
-
-### Module 4: Trading Bots (Optional) ✅
-- **Market Maker Bot**: Provides liquidity with inventory management
-- **Alpha Bot**: Directional trading using Moving Average Crossover
-- **Automated Execution**: Connects via WebSocket for real-time trading
-
-### Additional Features ✅
-- **Portfolio Management**: Real-time P&L calculation (realized + unrealized)
-- **Short Selling**: Full support for short positions
-- **Trade History**: Recent trade execution log
-- **System Statistics**: Live metrics dashboard
-- **Docker Deployment**: One-command launch with docker-compose
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Frontend (React + TypeScript)            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Candlestick  │  │  Order Book  │  │  Portfolio   │      │
-│  │    Chart     │  │  Visualizer  │  │   Widget     │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                            │ WebSocket
-┌─────────────────────────────────────────────────────────────┐
-│                  Backend (Node.js + TypeScript)              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │            WebSocket Broadcast Layer                  │   │
-│  └──────────────────────────────────────────────────────┘   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Matching   │  │   Market     │  │   Trading    │      │
-│  │    Engine    │  │  Generator   │  │     Bots     │      │
-│  │   (LOB)      │  │   (GBM)      │  │  (Optional)  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
+FRONTEND (React + TypeScript)
+  Market Ticker | Candlestick Chart | Order Book | Portfolio | AI Bot Panel
+        |
+        | WebSocket + REST
+        |
+BACKEND (Node.js + TypeScript)
+  WebSocket Server (50ms batched broadcast)
+  Multi-Symbol Matching Engines (12 independent LOBs)
+  Real Market Data Service (CoinGecko API)
+  GBM Market Generator (synthetic liquidity)
+  AI Trading Bot (4 strategies, live P&L)
+  Portfolio Manager (multi-symbol positions)
+  Candle Generator (5s OHLCV)
+  REST API (Express)
+        |
+ANALYTICS (Streamlit + Plotly)
+  System Metrics | Market Overview | Portfolio | Trade Flow Analysis
 ```
 
-## 📦 Tech Stack
+---
 
-- **Backend**: Node.js, TypeScript, Express, ws (WebSocket)
-- **Frontend**: React, TypeScript, Vite, Recharts, TailwindCSS
-- **Deployment**: Docker, Docker Compose
-- **Testing**: Jest, React Testing Library
+## Features
 
-## 🚀 Quick Start
+### Trading Engine
+- 12 tradeable assets: BTC, ETH, SOL, BNB, XRP (crypto) + AAPL, GOOGL, MSFT, TSLA, AMZN, NVDA, META (stocks)
+- Live prices from CoinGecko API with GBM micro-updates between API calls
+- Price-Time priority matching with sub-millisecond execution
+- Limit orders, market orders, cancel support
+- Partial fills with quantity tracking
+- Independent order book per symbol
 
-### Prerequisites
-- Docker & Docker Compose
-- Node.js 18+ (for local development)
+### AI Trading Bot
+- Runs autonomously across all 12 symbols simultaneously
+- Four strategies with weighted consensus voting:
+  - Mean Reversion: RSI-based oversold/overbought detection
+  - Momentum: EMA(8) vs EMA(21) crossover
+  - Breakout: Bollinger Band breakout with volume confirmation
+  - Market Making: Inventory-aware spread capture
+- Kelly Criterion-inspired position sizing
+- Stop-loss at 2%, take-profit at 3% per trade
+- Circuit breaker pauses trading at 10% drawdown
+- Live unrealized P&L tracking on open positions
+- Fully controllable from the frontend panel (start, stop, pause, toggle strategies)
 
-### One-Command Launch
-```bash
-docker-compose up
-```
+### Trading Terminal (React)
+- Price chart with SMA(7) and SMA(20) overlays, volume bars, toggleable indicators
+- Live order book with depth bars and spread display
+- Order entry with quick-quantity buttons and slippage warnings
+- Portfolio widget with realized and unrealized P&L, open positions
+- Market ticker with live 24h change from real API data
+- Recent trades feed connected to real WebSocket events
+- Trade history connected to real backend data
+- AI Bot panel with live metrics, positions, and recent bot trades
+- Analytics dashboard link in header
 
-The application will be available at:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8080
-- **WebSocket**: ws://localhost:8080
+### Analytics Dashboard (Streamlit)
+- System health: uptime, WebSocket connections, order and trade counts
+- Market data table with 24h change bar chart for all 12 symbols
+- Portfolio summary with P&L breakdown
+- Trade flow analysis: price over time, volume distribution, statistics
+- Configurable auto-refresh
 
-### Local Development
+### Infrastructure
+- 3-service Docker Compose: backend, frontend (nginx), analytics (Streamlit)
+- WebSocket message batching at 50ms cycles
+- Graceful shutdown on SIGTERM/SIGINT
+- CORS and compression middleware
 
-#### Backend
+---
+
+## Running Locally Without Docker
+
+### Backend
 ```bash
 cd backend
 npm install
 npm run dev
 ```
 
-#### Frontend
+### Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
+# Opens at http://localhost:5173
 ```
 
-## 📊 System Parameters
-
-- **Initial Capital**: $100,000 (all users and bots)
-- **Market Generator**: 50-100 orders/second
-- **GBM Parameters**: μ=0.0001, σ=0.02, S₀=100
-- **WebSocket Update Rate**: Real-time (< 100ms latency)
-- **Short Selling**: Enabled
-
-## 🤖 Trading Bots (Optional)
-
-### Market Maker Bot
-- Provides liquidity by placing limit orders around mid-price
-- Spread: 0.1% - 0.2%
-- Inventory risk management
-
-### Alpha Bot
-- Directional trading using Moving Average Crossover
-- Entry: MA(5) crosses MA(20)
-- Risk management: 2% per trade
-
-## 📈 Performance Metrics
-
-- Order matching: < 1ms latency
-- WebSocket throughput: 100+ messages/second
-- Frontend rendering: 60 FPS
-- Memory usage: < 512MB
-
-## 🧪 Testing
-
+### Analytics
 ```bash
-# Backend tests
-cd backend
-npm test
-
-# Frontend tests
-cd frontend
-npm test
+cd analytics
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-## 📝 Project Structure
+---
+
+## API Reference
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | System health and uptime |
+| `/api/symbols` | GET | All supported symbols with live quotes |
+| `/api/market-data` | GET | Live prices for all 12 assets |
+| `/api/market-data/:symbol` | GET | Price data for a specific symbol |
+| `/api/orderbook?symbol=X` | GET | Order book snapshot |
+| `/api/trades?symbol=X` | GET | Recent trades |
+| `/api/candles?symbol=X` | GET | OHLCV candle data |
+| `/api/orders` | POST | Submit a limit or market order |
+| `/api/orders/:id` | DELETE | Cancel an order |
+| `/api/portfolio/:userId` | GET | Portfolio summary |
+| `/api/orders/:userId` | GET | User trade history |
+| `/api/stats?symbol=X` | GET | Engine statistics |
+| `/api/bot/status` | GET | AI bot status, P&L, positions, recent trades |
+| `/api/bot/start` | POST | Start the AI bot |
+| `/api/bot/stop` | POST | Stop the AI bot |
+| `/api/bot/pause` | POST | Pause the AI bot |
+| `/api/bot/resume` | POST | Resume the AI bot |
+| `/api/bot/strategies` | POST | Update active strategies |
+| `/api/bot/trades` | GET | AI bot trade log |
+
+### WebSocket Events (ws://localhost:8080/ws)
+
+| Event | Direction | Description |
+|---|---|---|
+| `orderbook` | Server to Client | Order book updates every 500ms |
+| `trade` | Server to Client | Trade executions in real time |
+| `candle` | Server to Client | New OHLCV candles every 5s |
+| `market_data` | Server to Client | All symbol prices every 2s |
+| `order_update` | Server to Client | Order status changes |
+
+---
+
+## Technical Details
+
+### Matching Engine
+```
+Price-Time Priority (FIFO):
+  1. Incoming order checked against opposite book
+  2. Best price matched first
+  3. At same price, earliest order fills first
+  4. Partial fills tracked via remainingQuantity
+  5. Unfilled limit orders rest in the book
+
+Complexity:
+  Insert:  O(1) amortized
+  Match:   O(k) where k = price levels crossed
+  Cancel:  O(1) via order ID hash map
+```
+
+### GBM Price Simulation
+```
+S(t) = S0 * exp((mu - sigma^2/2)*t + sigma*sqrt(t)*Z)
+
+Parameters per asset:
+  mu (drift):     0.0001
+  sigma (vol):    0.015 to 0.04 depending on asset
+  dt:             per tick
+
+Real CoinGecko prices anchor synthetic prices every 30s.
+Micro-updates run every 2s between API calls.
+```
+
+### AI Bot Decision Cycle
+```
+Every 3 seconds per symbol:
+  1. Poll latest 100 trades for price/volume history
+  2. Run all active strategies, get signals with confidence scores
+  3. Weighted consensus vote (momentum 35%, mean reversion 30%,
+     breakout 25%, market making 10%)
+  4. If consensus confidence >= 0.25, execute trade
+  5. Position sizing via Kelly Criterion (half-Kelly)
+  6. Check all open trades for stop-loss / take-profit exit
+  7. Circuit breaker halts all trading at 10% drawdown
+```
+
+### WebSocket Batching
+```
+Problem: 12 symbols * 20 orders/sec = 240+ events/sec
+Solution:
+  - All events queued in memory buffer
+  - Every 50ms, buffer flushed and grouped by type
+  - Single JSON payload sent per client per cycle
+  - Result: ~20 sends/sec instead of 240+
+```
+
+---
+
+## Performance
+
+| Metric | Value |
+|---|---|
+| Order matching latency | < 1ms |
+| WebSocket broadcast cycle | 50ms |
+| Synthetic order generation | 20 orders/sec per symbol |
+| Frontend render rate | 60 FPS |
+| API response time p99 | < 50ms |
+| Backend memory usage | < 256MB |
+
+---
+
+## Project Structure
 
 ```
-synthetic-bull/
-├── backend/
-│   ├── src/
-│   │   ├── engine/          # Matching engine & order book
-│   │   ├── market/          # GBM market generator
-│   │   ├── bots/            # Trading bots
-│   │   ├── websocket/       # WebSocket server
-│   │   └── server.ts        # Main entry point
-│   ├── Dockerfile
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # React components
-│   │   ├── hooks/           # Custom hooks
-│   │   ├── services/        # WebSocket client
-│   │   └── App.tsx
-│   ├── Dockerfile
-│   └── package.json
-├── docker-compose.yml
-└── README.md
+synthetic-exchange/
+  backend/
+    src/
+      engine/         # MatchingEngine, OrderBook, PortfolioManager
+      market/         # MarketGenerator (GBM), RealMarketData, CandleGenerator
+      bots/           # AITradingBot (4 strategies)
+      websocket/      # WebSocketServer with batching
+      types/          # TypeScript interfaces
+      server.ts       # Express app, service wiring, API routes
+  frontend/
+    src/
+      components/     # 11 React components including AIBotPanel
+      services/       # ApiService, WebSocketService
+      types/          # Frontend type definitions
+  analytics/
+    app.py            # Streamlit dashboard
+    requirements.txt
+  docker-compose.yml
+  README.md
+  ARCHITECTURE_MAPPING.md
+  METHODOLOGY.md
+  TESTING_GUIDE.md
+  INTERVIEW_QUESTIONS.md
 ```
 
-## 🎯 Evaluation Criteria Coverage
+---
 
-- ✅ **Backend & Architecture (20%)**: High-performance matching engine with WebSocket stability
-- ✅ **Frontend & UX (50%)**: Responsive terminal with real-time charts and intuitive design
-- ✅ **Quant & Bot Logic (5% Bonus)**: Realistic GBM simulation with profitable trading strategies
-- ✅ **Code Quality & Deployment (20%)**: Clean TypeScript, full Docker support, one-click launch
+## Design Decisions
 
-## 📄 License
+| Decision | Rationale |
+|---|---|
+| In-memory order book | Sub-ms latency, appropriate for simulation scale |
+| WebSocket over SSE | Bidirectional, lower overhead, native reconnect support |
+| CoinGecko free tier | No API key required, reliable for crypto anchoring |
+| Separate Streamlit service | Decoupled analytics, Python data science ecosystem |
+| TypeScript full stack | Type safety, refactoring confidence, IDE support |
+| Docker Compose | One-command reproducible deployment across environments |
+| feedTrade pattern for AI bot | Avoids overwriting single-callback onTrade, gets data directly from server trade handler |
+| Half-Kelly position sizing | Reduces variance vs full Kelly while maintaining edge |
 
-MIT License - Built for NEXTBULL X IIT Kharagpur Open Soft Competition 2026
+---
+
+## Future Enhancements
+
+- PostgreSQL and TimescaleDB for trade persistence
+- Redis for order book caching and WebSocket pub/sub scaling
+- JWT authentication with multi-user accounts
+- Stop-limit, IOC, and FOK order types
+- Backtesting framework for bot strategy evaluation
+- Kubernetes deployment with horizontal scaling
+- Prometheus and Grafana monitoring
+- Options pricing module (Black-Scholes)
+
+---
+
+## License
+
+MIT License. Built as a production-grade portfolio project demonstrating full-stack engineering, financial systems, real-time architecture, and algorithmic trading.

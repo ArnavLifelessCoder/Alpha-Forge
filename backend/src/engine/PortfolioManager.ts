@@ -2,12 +2,14 @@ import { Trade, Portfolio } from '../types';
 
 /**
  * Portfolio Manager
- * Tracks user positions, cash, and P&L
+ * Tracks user positions, cash, and P&L across multiple symbols
  */
 export class PortfolioManager {
   private portfolios: Map<string, Portfolio> = new Map();
   private initialCapital: number = 100000; // $100,000
   private currentPrice: number = 100;
+  private symbolPrices: Map<string, number> = new Map();
+  private costBasis: Map<string, Map<string, number>> = new Map(); // userId -> symbol -> avgCost
 
   /**
    * Initialize a new user portfolio
@@ -177,7 +179,8 @@ export class PortfolioManager {
       positions: Array.from(portfolio.positions.entries()).map(([symbol, quantity]) => ({
         symbol,
         quantity,
-        marketValue: quantity * this.currentPrice,
+        marketValue: quantity * (this.symbolPrices.get(symbol) || this.currentPrice),
+        currentPrice: this.symbolPrices.get(symbol) || this.currentPrice,
       })),
       realizedPnL: portfolio.realizedPnL,
       unrealizedPnL: portfolio.unrealizedPnL,
@@ -186,5 +189,63 @@ export class PortfolioManager {
       pnlPercent,
       initialCapital: this.initialCapital,
     };
+  }
+
+  /**
+   * Process trade for a specific symbol (multi-symbol support)
+   */
+  processTradeForSymbol(symbol: string, trade: Trade): void {
+    // Update symbol price
+    this.symbolPrices.set(symbol, trade.price);
+
+    // Update buyer portfolio
+    const buyerPortfolio = this.getPortfolio(trade.buyUserId);
+    this.updatePosition(buyerPortfolio, symbol, trade.quantity);
+    this.updateCash(buyerPortfolio, -trade.price * trade.quantity);
+    this.updateCostBasis(trade.buyUserId, symbol, trade.price, trade.quantity);
+
+    // Update seller portfolio
+    const sellerPortfolio = this.getPortfolio(trade.sellUserId);
+    this.updatePosition(sellerPortfolio, symbol, -trade.quantity);
+    this.updateCash(sellerPortfolio, trade.price * trade.quantity);
+
+    this.currentPrice = trade.price;
+    this.recalculateAllUnrealizedPnL();
+  }
+
+  /**
+   * Update cost basis tracking
+   */
+  private updateCostBasis(userId: string, symbol: string, price: number, _quantity: number): void {
+    if (!this.costBasis.has(userId)) {
+      this.costBasis.set(userId, new Map());
+    }
+    const userBasis = this.costBasis.get(userId)!;
+    const currentCost = userBasis.get(symbol) || price;
+    // Simple moving average cost
+    userBasis.set(symbol, (currentCost + price) / 2);
+  }
+
+  /**
+   * Recalculate unrealized P&L using symbol-specific prices
+   */
+  private recalculateAllUnrealizedPnL(): void {
+    for (const portfolio of this.portfolios.values()) {
+      let unrealizedPnL = 0;
+      for (const [symbol, quantity] of portfolio.positions.entries()) {
+        const marketPrice = this.symbolPrices.get(symbol) || this.currentPrice;
+        const userBasis = this.costBasis.get(portfolio.userId);
+        const avgCost = userBasis?.get(symbol) || marketPrice;
+        unrealizedPnL += (marketPrice - avgCost) * quantity;
+      }
+      portfolio.unrealizedPnL = unrealizedPnL;
+    }
+  }
+
+  /**
+   * Update symbol price externally (from market data service)
+   */
+  updateSymbolPrice(symbol: string, price: number): void {
+    this.symbolPrices.set(symbol, price);
   }
 }

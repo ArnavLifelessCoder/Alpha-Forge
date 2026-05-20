@@ -68,7 +68,7 @@ export interface Portfolio {
 }
 
 export interface WebSocketMessage {
-  type: 'orderbook' | 'trade' | 'candle' | 'portfolio' | 'order_update';
+  type: 'orderbook' | 'trade' | 'candle' | 'portfolio' | 'order_update' | 'market_data';
   data: any;
   timestamp: number;
 }

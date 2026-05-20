@@ -1,4 +1,4 @@
-import { Activity } from 'lucide-react';
+import { Activity, Wifi, WifiOff, BarChart3, Globe, ExternalLink, PieChart } from 'lucide-react';
 
 interface HeaderProps {
   connected: boolean;
@@ -6,25 +6,74 @@ interface HeaderProps {
 
 export default function Header({ connected }: HeaderProps) {
   return (
-    <header className="bg-gradient-to-r from-indigo-900 to-purple-900 border-b border-indigo-700">
-      <div className="container mx-auto px-4 py-4">
+    <header className="bg-slate-900/95 backdrop-blur-sm border-b border-slate-700/50 sticky top-0 z-50">
+      <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
+          {/* Logo & Brand */}
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-2xl font-bold">S</span>
+            <div className="relative">
+              <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <BarChart3 className="w-5 h-5 text-white" />
+              </div>
+              {connected && (
+                <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-slate-900 animate-pulse"></div>
+              )}
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Synthetic Exchange</h1>
-              <p className="text-sm text-indigo-300">Real-Time Trading Simulator</p>
+              <h1 className="text-lg font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                Synthetic Exchange
+              </h1>
+              <p className="text-[10px] text-slate-400 -mt-0.5 flex items-center space-x-1">
+                <Globe className="w-2.5 h-2.5" />
+                <span>Real-Time Multi-Asset Trading Platform</span>
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
-            <span className="text-sm">
-              {connected ? 'Connected' : 'Disconnected'}
-            </span>
-            <Activity className="w-5 h-5 text-indigo-300" />
+          {/* Nav + Status */}
+          <div className="flex items-center space-x-3">
+            {/* Info badges */}
+            <div className="hidden md:flex items-center space-x-2 text-xs">
+              <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-800/80 rounded-lg border border-slate-700/50">
+                <Activity className="w-3 h-3 text-indigo-400" />
+                <span className="text-slate-300">Live Trading</span>
+              </div>
+              <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-800/80 rounded-lg border border-slate-700/50">
+                <Globe className="w-3 h-3 text-purple-400" />
+                <span className="text-slate-300">12 Markets</span>
+              </div>
+            </div>
+
+            {/* Analytics Dashboard Button */}
+            <a
+              href="http://localhost:8501"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 hover:text-purple-200 border border-purple-500/30 hover:border-purple-400/50 rounded-lg text-xs font-medium transition-all duration-200 group"
+            >
+              <PieChart className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Analytics</span>
+              <ExternalLink className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+            </a>
+
+            {/* Connection Status */}
+            <div className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
+              connected
+                ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+            }`}>
+              {connected ? (
+                <>
+                  <Wifi className="w-3 h-3" />
+                  <span className="hidden sm:inline">Connected</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3 h-3" />
+                  <span className="hidden sm:inline">Disconnected</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

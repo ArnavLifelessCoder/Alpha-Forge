@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wifi } from 'lucide-react';
+import { wsService } from '../services/WebSocketService';
+import { apiService } from '../services/ApiService';
 
-interface Market {
+interface MarketQuote {
   symbol: string;
-  name: string;
   price: number;
-  change: number;
-  volume: string;
-  type: 'crypto' | 'stock';
+  change24h: number;
+  changePercent24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  lastUpdated: number;
 }
 
 interface MarketTickerProps {
@@ -16,75 +20,121 @@ interface MarketTickerProps {
 }
 
 export default function MarketTicker({ currentSymbol, onSymbolChange }: MarketTickerProps) {
-  const [markets, setMarkets] = useState<Market[]>([
-    // Crypto
-    { symbol: 'BTC/USD', name: 'Bitcoin', price: 99.78, change: -0.23, volume: '2.4M', type: 'crypto' },
-    { symbol: 'ETH/USD', name: 'Ethereum', price: 45.32, change: 1.45, volume: '1.8M', type: 'crypto' },
-    { symbol: 'SOL/USD', name: 'Solana', price: 125.67, change: 3.21, volume: '980K', type: 'crypto' },
-    
-    // Stocks
-    { symbol: 'AAPL', name: 'Apple Inc.', price: 178.45, change: 2.15, volume: '52.3M', type: 'stock' },
-    { symbol: 'GOOGL', name: 'Alphabet', price: 142.30, change: -0.87, volume: '28.1M', type: 'stock' },
-    { symbol: 'MSFT', name: 'Microsoft', price: 415.20, change: 1.34, volume: '31.5M', type: 'stock' },
-    { symbol: 'TSLA', name: 'Tesla', price: 248.50, change: -2.45, volume: '98.7M', type: 'stock' },
-    { symbol: 'AMZN', name: 'Amazon', price: 178.90, change: 0.95, volume: '45.2M', type: 'stock' },
-    { symbol: 'NVDA', name: 'NVIDIA', price: 875.30, change: 4.21, volume: '67.8M', type: 'stock' },
-  ]);
+  const [quotes, setQuotes] = useState<MarketQuote[]>([]);
+  const [isLive, setIsLive] = useState(false);
 
-  // Simulate price updates
   useEffect(() => {
-    const interval = setInterval(() => {
-      setMarkets(prev => prev.map(market => ({
-        ...market,
-        price: market.price * (1 + (Math.random() - 0.5) * 0.002),
-        change: market.change + (Math.random() - 0.5) * 0.1,
-      })));
-    }, 3000);
+    // Fetch initial market data
+    const fetchData = async () => {
+      try {
+        const data = await apiService.getMarketData();
+        if (Array.isArray(data)) {
+          setQuotes(data);
+          setIsLive(true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch market data:', error);
+      }
+    };
 
-    return () => clearInterval(interval);
+    fetchData();
+
+    // Subscribe to real-time market data updates
+    const handleMarketData = (data: MarketQuote[]) => {
+      if (Array.isArray(data)) {
+        setQuotes(data);
+        setIsLive(true);
+      }
+    };
+
+    wsService.on('market_data', handleMarketData);
+
+    // Fallback polling if WS doesn't deliver
+    const pollInterval = setInterval(fetchData, 5000);
+
+    return () => {
+      wsService.off('market_data', handleMarketData);
+      clearInterval(pollInterval);
+    };
   }, []);
 
+  const formatVolume = (vol: number): string => {
+    if (vol >= 1e9) return `${(vol / 1e9).toFixed(1)}B`;
+    if (vol >= 1e6) return `${(vol / 1e6).toFixed(1)}M`;
+    if (vol >= 1e3) return `${(vol / 1e3).toFixed(1)}K`;
+    return vol.toFixed(0);
+  };
+
+  const formatPrice = (price: number): string => {
+    if (price >= 1000) return price.toFixed(2);
+    if (price >= 1) return price.toFixed(2);
+    return price.toFixed(4);
+  };
+
+  const getType = (symbol: string): 'crypto' | 'stock' => {
+    return symbol.includes('/') ? 'crypto' : 'stock';
+  };
+
   return (
-    <div className="bg-slate-800 border-b border-slate-700 overflow-hidden">
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center space-x-6 overflow-x-auto scrollbar-hide">
-          {markets.map((market) => (
-            <button
-              key={market.symbol}
-              onClick={() => onSymbolChange(market.symbol)}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg transition-all ${
-                currentSymbol === market.symbol
-                  ? 'bg-indigo-600 text-white'
-                  : 'hover:bg-slate-700 text-slate-300'
-              }`}
-            >
-              <div className="flex items-center space-x-3">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-semibold">{market.symbol}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${
-                      market.type === 'crypto' 
-                        ? 'bg-purple-500/20 text-purple-300' 
-                        : 'bg-blue-500/20 text-blue-300'
+    <div className="bg-slate-800/80 backdrop-blur-sm border-b border-slate-700/50 overflow-hidden">
+      <div className="container mx-auto px-4 py-2">
+        <div className="flex items-center space-x-2 mb-2">
+          <Wifi className={`w-3 h-3 ${isLive ? 'text-green-400' : 'text-yellow-400'}`} />
+          <span className="text-xs text-slate-400">
+            {isLive ? 'Live Market Data' : 'Connecting...'}
+          </span>
+          {isLive && <span className="text-xs text-green-400 animate-pulse">●</span>}
+        </div>
+        
+        <div className="flex items-center space-x-3 overflow-x-auto scrollbar-hide pb-1">
+          {quotes.map((quote) => {
+            const type = getType(quote.symbol);
+            const isSelected = currentSymbol === quote.symbol;
+            
+            return (
+              <button
+                key={quote.symbol}
+                onClick={() => onSymbolChange(quote.symbol)}
+                className={`flex-shrink-0 px-3 py-2 rounded-lg transition-all duration-200 ${
+                  isSelected
+                    ? 'bg-indigo-600/80 text-white ring-1 ring-indigo-400/50 shadow-lg shadow-indigo-500/20'
+                    : 'hover:bg-slate-700/60 text-slate-300'
+                }`}
+              >
+                <div className="flex items-center space-x-3 min-w-[160px]">
+                  <div className="text-left">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-sm font-bold">{quote.symbol}</span>
+                      <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
+                        type === 'crypto' 
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' 
+                          : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                      }`}>
+                        {type === 'crypto' ? 'CRYPTO' : 'STOCK'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right ml-auto">
+                    <div className="text-sm font-bold">${formatPrice(quote.price)}</div>
+                    <div className={`text-xs flex items-center justify-end ${
+                      quote.changePercent24h >= 0 ? 'text-green-400' : 'text-red-400'
                     }`}>
-                      {market.type === 'crypto' ? 'CRYPTO' : 'STOCK'}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-400">{market.name}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold">${market.price.toFixed(2)}</div>
-                  <div className={`text-xs flex items-center ${market.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {market.change >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                    {market.change >= 0 ? '+' : ''}{market.change.toFixed(2)}%
+                      {quote.changePercent24h >= 0 
+                        ? <TrendingUp className="w-3 h-3 mr-0.5" /> 
+                        : <TrendingDown className="w-3 h-3 mr-0.5" />
+                      }
+                      {quote.changePercent24h >= 0 ? '+' : ''}{quote.changePercent24h.toFixed(2)}%
+                    </div>
                   </div>
                 </div>
-                <div className="text-xs text-slate-400">
-                  Vol: {market.volume}
-                </div>
-              </div>
-            </button>
-          ))}
+                {quote.volume24h > 0 && (
+                  <div className="text-[10px] text-slate-400 text-right mt-0.5">
+                    Vol: ${formatVolume(quote.volume24h)}
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

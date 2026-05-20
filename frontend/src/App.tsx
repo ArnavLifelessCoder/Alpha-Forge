@@ -10,9 +10,10 @@ import OrderPanel from './components/OrderPanel';
 import PortfolioWidget from './components/PortfolioWidget';
 import RecentTrades from './components/RecentTrades';
 import OrderHistory from './components/OrderHistory';
+import AIBotPanel from './components/AIBotPanel';
 import StatsBar from './components/StatsBar';
 
-const USER_ID = 'USER_1'; // Default user
+const USER_ID = 'USER_1';
 
 function App() {
   const [connected, setConnected] = useState(false);
@@ -23,7 +24,7 @@ function App() {
   const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
-    // Connect to WebSocket
+    // Connect WebSocket
     wsService.connect().then(() => {
       setConnected(true);
     }).catch(error => {
@@ -31,20 +32,30 @@ function App() {
     });
 
     // Subscribe to order book updates
-    const handleOrderBook = (data: OrderBook) => {
-      setOrderBook(data);
+    const handleOrderBook = (data: any) => {
+      // Handle both symbol-specific and default updates
+      if (data.symbol) {
+        if (data.symbol === currentSymbol) {
+          setOrderBook({ bids: data.bids || [], asks: data.asks || [] });
+        }
+      } else {
+        setOrderBook(data);
+      }
     };
 
     // Subscribe to candles
-    const handleCandle = (data: Candle) => {
+    const handleCandle = (data: any) => {
+      const candleData = data.symbol ? data : data;
+      if (data.symbol && data.symbol !== currentSymbol) return;
+      
       setCandles(prev => {
         const updated = [...prev];
-        const existingIndex = updated.findIndex(c => c.timestamp === data.timestamp);
+        const existingIndex = updated.findIndex(c => c.timestamp === candleData.timestamp);
         
         if (existingIndex !== -1) {
-          updated[existingIndex] = data;
+          updated[existingIndex] = candleData;
         } else {
-          updated.push(data);
+          updated.push(candleData);
         }
         
         return updated.slice(-100);
@@ -58,12 +69,14 @@ function App() {
     const fetchInitialData = async () => {
       try {
         const [candlesData, portfolioData, statsData] = await Promise.all([
-          apiService.getCandles(100),
+          apiService.getCandles(100, currentSymbol),
           apiService.getPortfolio(USER_ID),
-          apiService.getStats(),
+          apiService.getStats(currentSymbol),
         ]);
 
-        setCandles(candlesData);
+        // Handle both array and object responses
+        const candlesList = candlesData.candles || candlesData;
+        if (Array.isArray(candlesList)) setCandles(candlesList);
         setPortfolio(portfolioData);
         setStats(statsData);
       } catch (error) {
@@ -73,24 +86,20 @@ function App() {
 
     fetchInitialData();
 
-    // Refresh portfolio periodically
+    // Refresh portfolio
     const portfolioInterval = setInterval(async () => {
       try {
         const portfolioData = await apiService.getPortfolio(USER_ID);
         setPortfolio(portfolioData);
-      } catch (error) {
-        console.error('Error refreshing portfolio:', error);
-      }
+      } catch (error) {}
     }, 2000);
 
-    // Refresh stats periodically
+    // Refresh stats
     const statsInterval = setInterval(async () => {
       try {
-        const statsData = await apiService.getStats();
+        const statsData = await apiService.getStats(currentSymbol);
         setStats(statsData);
-      } catch (error) {
-        console.error('Error refreshing stats:', error);
-      }
+      } catch (error) {}
     }, 5000);
 
     return () => {
@@ -99,53 +108,65 @@ function App() {
       clearInterval(portfolioInterval);
       clearInterval(statsInterval);
     };
-  }, []);
+  }, [currentSymbol]);
 
   const handleOrderSubmit = async () => {
-    // Refresh portfolio after order
     try {
       const portfolioData = await apiService.getPortfolio(USER_ID);
       setPortfolio(portfolioData);
-    } catch (error) {
-      console.error('Error refreshing portfolio:', error);
-    }
+    } catch (error) {}
   };
 
-  const currentPrice = orderBook.asks[0]?.price || orderBook.bids[0]?.price || 100;
+  const handleSymbolChange = (symbol: string) => {
+    setCurrentSymbol(symbol);
+    setCandles([]); // Clear candles for new symbol
+    setOrderBook({ bids: [], asks: [] }); // Clear order book
+  };
+
+  const currentPrice = orderBook.asks?.[0]?.price || orderBook.bids?.[0]?.price || 100;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white">
       <Header connected={connected} />
       
-      <MarketTicker currentSymbol={currentSymbol} onSymbolChange={setCurrentSymbol} />
+      <MarketTicker currentSymbol={currentSymbol} onSymbolChange={handleSymbolChange} />
       
       <StatsBar stats={stats} currentPrice={currentPrice} />
 
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Left Column - Chart and Order Panel */}
-          <div className="lg:col-span-3 space-y-6">
-            <CandlestickChart candles={candles} />
+      <div className="container mx-auto px-4 py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          {/* Main Content - Chart & Trading */}
+          <div className="lg:col-span-3 space-y-4">
+            <CandlestickChart candles={candles} symbol={currentSymbol} />
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <OrderPanel 
                 userId={USER_ID} 
                 onOrderSubmit={handleOrderSubmit} 
                 currentPrice={currentPrice}
                 currentSymbol={currentSymbol}
               />
-              <OrderHistory />
+              <OrderHistory userId={USER_ID} />
             </div>
           </div>
 
-          {/* Right Column - Order Book, Portfolio, Trades */}
-          <div className="space-y-6">
+          {/* Sidebar */}
+          <div className="space-y-4">
+            <AIBotPanel />
             <PortfolioWidget portfolio={portfolio} currentPrice={currentPrice} />
             <OrderBookWidget orderBook={orderBook} />
-            <RecentTrades />
+            <RecentTrades symbol={currentSymbol} />
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-800 mt-8 py-4">
+        <div className="container mx-auto px-4 text-center text-xs text-slate-500">
+          <p>Synthetic Exchange v2.0 — Real-Time Multi-Asset Trading Simulator</p>
+          <p className="mt-1">Built with React, TypeScript, Node.js, WebSocket • Live market data via CoinGecko API</p>
+        </div>
+      </footer>
     </div>
   );
 }

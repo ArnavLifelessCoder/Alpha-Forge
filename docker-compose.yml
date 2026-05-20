@@ -13,12 +13,13 @@ services:
       - MARKET_GENERATOR_ENABLED=true
       - TRADING_BOTS_ENABLED=true
     networks:
-      - synthetic-bull-network
+      - exchange-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
 
   frontend:
     build:
@@ -29,11 +30,26 @@ services:
     depends_on:
       - backend
     networks:
-      - synthetic-bull-network
+      - exchange-network
     environment:
       - VITE_BACKEND_URL=http://localhost:8080
       - VITE_WS_URL=ws://localhost:8080
+    restart: unless-stopped
+
+  analytics:
+    build:
+      context: ./analytics
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    networks:
+      - exchange-network
+    environment:
+      - BACKEND_URL=http://backend:8080
+    restart: unless-stopped
 
 networks:
-  synthetic-bull-network:
+  exchange-network:
     driver: bridge

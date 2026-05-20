@@ -37,3 +37,6 @@ coverage/
 .cache/
 temp/
 tmp/
+
+# Private documentation
+INTERVIEW_QUESTIONS.md

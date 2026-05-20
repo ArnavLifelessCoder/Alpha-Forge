@@ -8,6 +8,13 @@ export enum OrderSide {
   SELL = 'SELL',
 }
 
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  PARTIAL = 'PARTIAL',
+  FILLED = 'FILLED',
+  CANCELLED = 'CANCELLED',
+}
+
 export interface OrderBookLevel {
   price: number;
   quantity: number;
@@ -17,15 +24,7 @@ export interface OrderBookLevel {
 export interface OrderBook {
   bids: OrderBookLevel[];
   asks: OrderBookLevel[];
-}
-
-export interface Trade {
-  id: string;
-  price: number;
-  quantity: number;
-  timestamp: number;
-  buyUserId: string;
-  sellUserId: string;
+  symbol?: string;
 }
 
 export interface Candle {
@@ -35,16 +34,20 @@ export interface Candle {
   low: number;
   close: number;
   volume: number;
+  symbol?: string;
+}
+
+export interface Position {
+  symbol: string;
+  quantity: number;
+  marketValue: number;
+  currentPrice?: number;
 }
 
 export interface Portfolio {
   userId: string;
   cash: number;
-  positions: Array<{
-    symbol: string;
-    quantity: number;
-    marketValue: number;
-  }>;
+  positions: Position[];
   realizedPnL: number;
   unrealizedPnL: number;
   totalPnL: number;
@@ -53,10 +56,32 @@ export interface Portfolio {
   initialCapital: number;
 }
 
+export interface Trade {
+  id: string;
+  price: number;
+  quantity: number;
+  timestamp: number;
+  buyUserId: string;
+  sellUserId: string;
+  symbol?: string;
+}
+
+export interface MarketQuote {
+  symbol: string;
+  price: number;
+  change24h: number;
+  changePercent24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  lastUpdated: number;
+}
+
 export interface OrderRequest {
   userId: string;
   type: OrderType;
   side: OrderSide;
   price?: number;
   quantity: number;
+  symbol?: string;
 }

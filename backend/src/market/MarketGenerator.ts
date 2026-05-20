@@ -202,6 +202,26 @@ export class MarketGenerator {
   }
 
   /**
+   * Start generating at a specific price (for multi-symbol support)
+   */
+  startAtPrice(price: number): void {
+    this.S0 = price;
+    this.currentPrice = price;
+    this.start();
+  }
+
+  /**
+   * Sync base price with real market data
+   */
+  syncBasePrice(realPrice: number): void {
+    // Gently pull synthetic price toward real price
+    const drift = (realPrice - this.currentPrice) * 0.1;
+    this.currentPrice += drift;
+    this.S0 = this.currentPrice;
+    this.currentTime = 0;
+  }
+
+  /**
    * Get current theoretical price
    */
   getCurrentPrice(): number {

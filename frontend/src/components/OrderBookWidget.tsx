@@ -6,80 +6,84 @@ interface OrderBookWidgetProps {
 }
 
 export default function OrderBookWidget({ orderBook }: OrderBookWidgetProps) {
-  const maxQuantity = Math.max(
-    ...orderBook.bids.map(b => b.quantity),
-    ...orderBook.asks.map(a => a.quantity),
-    1
-  );
+  const { bids = [], asks = [] } = orderBook;
+
+  const maxBidQty = Math.max(...bids.map(b => b.quantity), 1);
+  const maxAskQty = Math.max(...asks.map(a => a.quantity), 1);
+
+  const spread = asks.length > 0 && bids.length > 0
+    ? asks[0].price - bids[0].price
+    : null;
+  
+  const spreadBps = spread && bids[0]?.price
+    ? (spread / bids[0].price * 10000).toFixed(1)
+    : null;
 
   return (
-    <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-      <div className="flex items-center space-x-2 mb-4">
-        <BookOpen className="w-5 h-5 text-indigo-400" />
-        <h2 className="text-lg font-semibold">Order Book</h2>
+    <div className="bg-slate-800 rounded-xl border border-slate-700/50 p-4 shadow-xl">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-2">
+          <BookOpen className="w-4 h-4 text-indigo-400" />
+          <h2 className="text-sm font-bold">Order Book</h2>
+        </div>
+        {spread !== null && (
+          <span className="text-[10px] text-slate-400 bg-slate-700/50 px-2 py-0.5 rounded">
+            Spread: {spreadBps} bps
+          </span>
+        )}
       </div>
 
-      <div className="space-y-4">
-        {/* Asks (Sell Orders) */}
-        <div>
-          <div className="grid grid-cols-3 text-xs text-slate-400 mb-2 px-2">
-            <div>Price</div>
-            <div className="text-right">Size</div>
-            <div className="text-right">Total</div>
-          </div>
-          
-          <div className="space-y-1">
-            {orderBook.asks.slice(0, 10).reverse().map((ask, idx) => (
-              <div
-                key={`ask-${idx}`}
-                className="relative grid grid-cols-3 text-sm py-1 px-2 rounded hover:bg-slate-700/50"
-              >
-                <div
-                  className="absolute inset-0 bg-red-500/10 rounded"
-                  style={{ width: `${(ask.quantity / maxQuantity) * 100}%` }}
-                />
-                <div className="relative text-red-400">${ask.price.toFixed(2)}</div>
-                <div className="relative text-right">{ask.quantity.toFixed(2)}</div>
-                <div className="relative text-right text-slate-400">
-                  {(ask.price * ask.quantity).toFixed(2)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Spread */}
-        <div className="border-t border-b border-slate-600 py-2 text-center">
-          <div className="text-xs text-slate-400">Spread</div>
-          <div className="text-sm font-semibold">
-            {orderBook.asks[0] && orderBook.bids[0]
-              ? `$${(orderBook.asks[0].price - orderBook.bids[0].price).toFixed(2)}`
-              : '-'}
-          </div>
-        </div>
-
-        {/* Bids (Buy Orders) */}
-        <div>
-          <div className="space-y-1">
-            {orderBook.bids.slice(0, 10).map((bid, idx) => (
-              <div
-                key={`bid-${idx}`}
-                className="relative grid grid-cols-3 text-sm py-1 px-2 rounded hover:bg-slate-700/50"
-              >
-                <div
-                  className="absolute inset-0 bg-green-500/10 rounded"
-                  style={{ width: `${(bid.quantity / maxQuantity) * 100}%` }}
-                />
-                <div className="relative text-green-400">${bid.price.toFixed(2)}</div>
-                <div className="relative text-right">{bid.quantity.toFixed(2)}</div>
-                <div className="relative text-right text-slate-400">
-                  {(bid.price * bid.quantity).toFixed(2)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Column Headers */}
+      <div className="grid grid-cols-3 text-[10px] text-slate-500 mb-1.5 px-1 font-medium uppercase tracking-wider">
+        <div>Price</div>
+        <div className="text-right">Size</div>
+        <div className="text-right">Total</div>
       </div>
+
+      {/* Asks (reversed, lowest at bottom) */}
+      <div className="space-y-0.5 mb-2 max-h-32 overflow-hidden">
+        {asks.slice(0, 8).reverse().map((level, index) => (
+          <div key={`ask-${index}`} className="relative grid grid-cols-3 text-xs py-0.5 px-1 rounded">
+            <div 
+              className="absolute inset-0 bg-red-500/8 rounded" 
+              style={{ width: `${(level.quantity / maxAskQty) * 100}%`, right: 0, left: 'auto' }}
+            />
+            <div className="relative text-red-400 font-mono">${level.price.toFixed(2)}</div>
+            <div className="relative text-right text-slate-300 font-mono">{level.quantity.toFixed(2)}</div>
+            <div className="relative text-right text-slate-500 font-mono">{level.orderCount}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Spread Indicator */}
+      {spread !== null && (
+        <div className="flex items-center justify-center py-1.5 my-1 border-y border-slate-700/50">
+          <span className="text-xs font-bold text-white">${((asks[0]?.price || 0 + (bids[0]?.price || 0)) / 2).toFixed(2)}</span>
+          <span className="text-[10px] text-slate-400 ml-2">±${(spread / 2).toFixed(3)}</span>
+        </div>
+      )}
+
+      {/* Bids */}
+      <div className="space-y-0.5 mt-2 max-h-32 overflow-hidden">
+        {bids.slice(0, 8).map((level, index) => (
+          <div key={`bid-${index}`} className="relative grid grid-cols-3 text-xs py-0.5 px-1 rounded">
+            <div 
+              className="absolute inset-0 bg-green-500/8 rounded" 
+              style={{ width: `${(level.quantity / maxBidQty) * 100}%`, right: 0, left: 'auto' }}
+            />
+            <div className="relative text-green-400 font-mono">${level.price.toFixed(2)}</div>
+            <div className="relative text-right text-slate-300 font-mono">{level.quantity.toFixed(2)}</div>
+            <div className="relative text-right text-slate-500 font-mono">{level.orderCount}</div>
+          </div>
+        ))}
+      </div>
+
+      {bids.length === 0 && asks.length === 0 && (
+        <div className="text-center py-6 text-slate-500 text-xs">
+          <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p>Waiting for orders...</p>
+        </div>
+      )}
     </div>
   );
 }

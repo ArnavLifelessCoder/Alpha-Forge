@@ -1,1007 +1,422 @@
-# 🎯 Interview Questions & Answers - Synthetic Exchange Project
+# Interview Questions and Answers - Synthetic Exchange
 
 ## Table of Contents
-1. [System Architecture Questions](#system-architecture-questions)
-2. [Backend & Matching Engine Questions](#backend--matching-engine-questions)
-3. [Frontend & Real-Time Systems Questions](#frontend--real-time-systems-questions)
-4. [Trading & Financial Concepts Questions](#trading--financial-concepts-questions)
-5. [Performance & Scalability Questions](#performance--scalability-questions)
-6. [Technical Implementation Questions](#technical-implementation-questions)
+1. [System Architecture](#system-architecture)
+2. [Matching Engine and Backend](#matching-engine-and-backend)
+3. [AI Trading Bot](#ai-trading-bot)
+4. [Frontend and Real-Time Systems](#frontend-and-real-time-systems)
+5. [Trading and Financial Concepts](#trading-and-financial-concepts)
+6. [Performance and Scalability](#performance-and-scalability)
+7. [Technical Implementation](#technical-implementation)
+8. [Behavioral and Project Questions](#behavioral-and-project-questions)
 
 ---
 
-## System Architecture Questions
+## System Architecture
 
-### Q1: Can you explain the overall architecture of your trading platform?
+### Q1: Describe the overall architecture of your trading platform.
 
-**Answer:**
-The platform follows a **microservices-inspired architecture** with clear separation of concerns:
+The platform has three tiers running as separate Docker services.
 
-**Frontend Layer (React + TypeScript):**
-- Single Page Application (SPA) built with React 18
-- Real-time WebSocket client for live data streaming
-- Component-based architecture with reusable UI elements
-- State management using React hooks
-- Responsive design with TailwindCSS
+The frontend is a React 18 single-page application that connects to the backend via REST for commands and WebSocket for real-time streaming. It renders a trading terminal with live charts, order book, portfolio tracking, and an AI bot control panel.
 
-**Backend Layer (Node.js + TypeScript):**
-- Express.js REST API for order submission and queries
-- WebSocket server for real-time data broadcasting
-- In-memory matching engine with Price-Time priority
-- Market generator using Geometric Brownian Motion (GBM)
-- Portfolio manager for position tracking and P&L calculation
+The backend is a Node.js Express server that hosts 12 independent matching engines (one per symbol), a real market data service polling CoinGecko, a GBM-based synthetic market generator, a portfolio manager, a candle generator, and an AI trading bot. A WebSocket server batches all events and broadcasts them to connected clients every 50ms.
 
-**Communication:**
-- REST API for commands (POST orders, GET portfolio)
-- WebSocket for real-time updates (order book, trades, candles)
-- JSON for data serialization
-
-**Deployment:**
-- Docker containers for both frontend and backend
-- Docker Compose for orchestration
-- Nginx for frontend serving
-- Health checks and graceful shutdown
+The analytics service is a Streamlit Python app that connects to the backend REST API and renders market data, portfolio, and trade flow charts with auto-refresh.
 
 ---
 
 ### Q2: Why did you choose this tech stack?
 
-**Answer:**
-**TypeScript:** Type safety reduces bugs, better IDE support, easier refactoring
+Node.js was chosen for the backend because its non-blocking event loop handles thousands of concurrent WebSocket connections without thread overhead. The single-threaded model avoids context switching costs that would add latency to order matching.
 
-**Node.js:** 
-- Single-threaded event loop perfect for I/O-intensive operations
-- Non-blocking architecture ideal for WebSocket connections
-- JavaScript ecosystem for both frontend and backend
+TypeScript was used throughout because strict type checking catches mismatches in order structures, trade objects, and API contracts at compile time rather than runtime.
 
-**React:**
-- Component reusability
-- Virtual DOM for efficient updates
-- Large ecosystem (Recharts for charts, Lucide for icons)
-- Excellent for real-time UIs
+React was chosen for the frontend because its virtual DOM efficiently handles high-frequency state updates from WebSocket messages. Components re-render only when their specific data changes.
 
-**Docker:**
-- Consistent environments (dev/prod parity)
-- Easy deployment
-- Isolation and portability
-- One-command setup
+Streamlit was chosen for analytics because it keeps the Python data science ecosystem (pandas, plotly) available without coupling it to the Node.js backend.
+
+Docker Compose provides one-command reproducible deployment with service isolation.
 
 ---
 
-### Q3: How does data flow through your system?
+### Q3: How does data flow through the system?
 
-**Answer:**
-**Order Submission Flow:**
+Order submission:
 ```
-User → Frontend → REST API → Matching Engine → Trade Execution
-                                    ↓
-                            Portfolio Manager
-                                    ↓
-                            WebSocket Broadcast
-                                    ↓
-                            All Connected Clients
-```
-
-**Market Data Flow:**
-```
-Market Generator → Matching Engine → Order Book Updates
-                                          ↓
-                                    WebSocket Server
-                                          ↓
-                                    Frontend Charts
+User -> Frontend -> POST /api/orders -> MatchingEngine -> OrderBook
+                                                              |
+                                                         Trade[]
+                                                              |
+                                              portfolioManager.processTradeForSymbol()
+                                              candleGen.processTrade()
+                                              aiBot.feedTrade()
+                                              wsServer.broadcast(trade, orderbook)
+                                                              |
+                                                    All WebSocket clients
 ```
 
-**Real-Time Updates:**
-- Order book snapshots: Every 500ms
-- Trade executions: Immediate
-- Candles: Every 5 seconds
-- Portfolio: On-demand + after trades
+Market data:
+```
+CoinGecko API (every 30s) -> RealMarketDataService -> wsServer.broadcast(market_data)
+                                                    -> MarketGenerator.syncBasePrice()
+                                                    -> portfolioManager.updateSymbolPrice()
+
+GBM micro-updates (every 2s) -> wsServer.broadcast(market_data)
+```
+
+AI bot:
+```
+Trade events -> aiBot.feedTrade() -> price/volume history buffers
+                                          |
+                                    every 3s: tick()
+                                          |
+                                    4 strategy signals
+                                          |
+                                    weighted consensus
+                                          |
+                                    MatchingEngine.submitOrder()
+```
 
 ---
 
-## Backend & Matching Engine Questions
+## Matching Engine and Backend
 
-### Q4: Explain how your matching engine works.
+### Q4: How does your matching engine work?
 
-**Answer:**
-The matching engine implements a **Limit Order Book (LOB)** with **Price-Time priority**:
+The engine implements a Limit Order Book with Price-Time priority. The data structure uses two hash maps (bids and asks) keyed by price, each holding a PriceLevel with a FIFO queue of orders. A third hash map provides O(1) order lookup by ID.
 
-**Data Structure:**
-```typescript
-class OrderBook {
-  bids: Map<number, PriceLevel>  // Descending order
-  asks: Map<number, PriceLevel>  // Ascending order
-  orderMap: Map<string, Order>   // O(1) lookup
-}
-```
+For a limit buy order, the engine scans the ask side in ascending price order. It matches against each price level as long as the ask price is at or below the order's limit price. Within each price level, orders are filled in FIFO order (time priority). If the incoming order is not fully filled, the remainder rests in the bid book.
 
-**Matching Algorithm:**
+For a market order, the engine walks the opposite book without a price constraint until the order is fully filled or the book is exhausted.
 
-1. **Market Orders:**
-   - Match immediately at best available prices
-   - Walk through price levels until filled
-   - Execute at multiple price levels if needed
-
-2. **Limit Orders:**
-   - Check if price crosses spread
-   - If yes: Match against opposite side
-   - If no: Add to order book at price level
-
-3. **Price-Time Priority:**
-   - Orders at same price level matched FIFO
-   - Earlier orders get priority
-   - Implemented using queue (array) at each price level
-
-**Time Complexity:**
-- Order insertion: O(log n)
-- Order matching: O(k) where k = number of price levels crossed
-- Order lookup: O(1) via hash map
-- Cancel order: O(1) lookup + O(log n) removal
+Partial fills are tracked via a `remainingQuantity` field. When `remainingQuantity` reaches zero, the order status becomes FILLED. If it is reduced but not zero, the status is PARTIAL.
 
 ---
 
-### Q5: How do you handle partial fills?
+### Q5: How do you handle the single-callback limitation of MatchingEngine.onTrade?
 
-**Answer:**
-Partial fills are handled through the `remainingQuantity` field:
+The MatchingEngine exposes a single `onTrade` callback rather than a full EventEmitter. The server registers this callback to handle portfolio updates, candle generation, WebSocket broadcasting, and AI bot data feeding all in one place.
 
-```typescript
-interface Order {
-  quantity: number;           // Original quantity
-  remainingQuantity: number;  // Unfilled quantity
-  status: OrderStatus;        // PENDING, PARTIAL, FILLED
-}
-```
-
-**Process:**
-1. Order arrives with quantity = 10
-2. Matches 6 units → remainingQuantity = 4, status = PARTIAL
-3. If remainingQuantity > 0 after matching, add to book
-4. Future matches reduce remainingQuantity
-5. When remainingQuantity = 0, status = FILLED
-
-**Benefits:**
-- Accurate fill tracking
-- Users see partial execution
-- Can cancel partially filled orders
-- Portfolio updates incrementally
+The AI bot cannot subscribe directly because that would overwrite the server's callback. Instead, the server explicitly calls `aiBot.feedTrade(symbol, trade)` inside its own onTrade handler. This is the feedTrade injection pattern — the bot receives data pushed to it rather than subscribing independently.
 
 ---
 
-### Q6: Explain your market simulation using GBM.
+### Q6: Explain your GBM market simulation.
 
-**Answer:**
-**Geometric Brownian Motion (GBM)** simulates realistic price movements:
+Geometric Brownian Motion models realistic price paths:
 
-**Formula:**
 ```
-S_t = S_0 * exp((μ - σ²/2)t + σW_t)
-
-Where:
-- S_t: Price at time t
-- S_0: Initial price (100)
-- μ: Drift (0.0001) - expected return
-- σ: Volatility (0.02) - price variability
-- W_t: Wiener process (Brownian motion)
+S(t) = S0 * exp((mu - sigma^2/2)*t + sigma*sqrt(t)*Z)
 ```
 
-**Implementation:**
-```typescript
-updatePrice() {
-  const dW = randomNormal() * sqrt(dt);
-  const drift = (μ - σ²/2) * t;
-  const diffusion = σ * dW;
-  currentPrice = S_0 * exp(drift + diffusion);
-}
-```
+where Z is a standard normal random variable generated via the Box-Muller transform, mu is a small positive drift (0.0001), and sigma is asset-specific volatility (0.015 for AAPL, 0.040 for TSLA and SOL).
 
-**Liquidity Generation:**
-- Generate bid/ask orders around current price
-- Spread: 10 basis points (0.1%)
-- Order sizes: Random 1-10 units
-- Frequency: 75 orders/second
+The simulation runs at 20 orders per second per symbol. Each tick generates bid and ask limit orders around the current synthetic price with a 10 basis point spread.
 
-**Why GBM?**
-- Widely used in finance (Black-Scholes model)
-- Produces realistic price paths
-- Prevents negative prices (exponential)
-- Captures volatility clustering
+Real CoinGecko prices anchor the synthetic prices every 30 seconds using a 10% convergence factor, so the synthetic price gradually moves toward the real price without jumping. Between API calls, GBM micro-updates run every 2 seconds to keep prices moving.
 
 ---
 
-## Frontend & Real-Time Systems Questions
+### Q7: How does the multi-symbol architecture work?
 
-### Q7: How do you handle real-time updates in the frontend?
+Each of the 12 symbols gets its own independent MatchingEngine, MarketGenerator, and CandleGenerator created in a loop during server startup. They are stored in a `symbolEngines` map keyed by symbol string.
 
-**Answer:**
-**WebSocket Architecture:**
+All REST endpoints accept an optional `symbol` query parameter or body field. If provided, the request is routed to the corresponding engine. If not, it falls back to a default engine for backward compatibility.
 
-```typescript
-class WebSocketService {
-  private ws: WebSocket;
-  private handlers: Map<string, MessageHandler[]>;
-  
-  connect() {
-    this.ws = new WebSocket(url);
-    this.ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      this.handleMessage(message);
-    };
-  }
-  
-  on(type: string, handler: MessageHandler) {
-    this.handlers.get(type).push(handler);
-  }
-}
-```
-
-**Message Types:**
-- `orderbook`: Order book snapshots
-- `trade`: Trade executions
-- `candle`: OHLCV candles
-- `portfolio`: Portfolio updates
-
-**Optimization Techniques:**
-
-1. **Message Batching:**
-   - Queue messages for 50ms
-   - Send in batches to reduce overhead
-   - Reduces network calls by 95%
-
-2. **Selective Updates:**
-   - Only update changed components
-   - React's virtual DOM handles diffing
-   - Memoization for expensive calculations
-
-3. **Reconnection Logic:**
-   - Exponential backoff (1s, 2s, 4s, 8s...)
-   - Max 10 reconnection attempts
-   - Automatic state recovery
-
-**Performance:**
-- 100+ messages/second handled smoothly
-- 60 FPS rendering maintained
-- < 100ms end-to-end latency
+The portfolio manager is shared across all symbols. It tracks positions per symbol per user and calculates unrealized P&L using per-symbol current prices.
 
 ---
 
-### Q8: How do you prevent memory leaks in your React components?
+## AI Trading Bot
 
-**Answer:**
-**Cleanup Strategies:**
+### Q8: Describe the AI trading bot's architecture.
 
-1. **WebSocket Cleanup:**
+The bot runs a decision cycle every 3 seconds across all 12 symbols. Each cycle:
+
+1. Checks the circuit breaker (pauses if drawdown exceeds 10%)
+2. For each symbol with at least 30 price data points and no active cooldown:
+   - Runs four strategy functions, each returning a signal with a confidence score
+   - Combines signals via weighted consensus voting
+   - If the winning score exceeds 0.25, executes a market order
+3. Checks all open trades for stop-loss (-2%) or take-profit (+3%) exit conditions
+
+The bot receives price data via `feedTrade()`, which is called by the server's trade handler for every executed trade. This keeps the price history current without the bot needing to poll.
+
+---
+
+### Q9: Explain each trading strategy.
+
+Mean Reversion uses RSI(14). RSI below 30 signals oversold (buy), above 70 signals overbought (sell). Confidence scales linearly with distance from the threshold. This strategy bets that extreme readings revert to the mean.
+
+Momentum uses EMA(8) vs EMA(21) crossover. When the fast EMA exceeds the slow EMA by more than 0.2%, a bullish trend is confirmed. Confidence scales with the percentage difference. This strategy follows established trends.
+
+Breakout uses 20-period Bollinger Bands (2 standard deviations). A price close above the upper band with a volume spike (1.3x average) signals a buy. This strategy trades range expansions confirmed by volume.
+
+Market Making leans against inventory. If the bot holds more than 15 units long, it sells to reduce exposure. If more than 15 units short, it buys. Otherwise it randomly provides liquidity with low confidence. This strategy captures spread while managing inventory risk.
+
+---
+
+### Q10: How does the consensus voting work?
+
+Each strategy returns a signal with an action (BUY, SELL, or HOLD) and a confidence score between 0 and 1. The consensus function computes weighted scores:
+
+```
+buyScore  = sum(confidence * weight) for all BUY signals
+sellScore = sum(confidence * weight) for all SELL signals
+
+weights: momentum 0.35, mean_reversion 0.30, breakout 0.25, market_making 0.10
+```
+
+If buyScore exceeds sellScore and buyScore exceeds 0.10, the bot executes a buy. The same logic applies for sell. If neither threshold is met, the bot holds.
+
+Momentum gets the highest weight because trend-following tends to be more reliable in synthetic GBM markets. Market making gets the lowest weight because it is inventory-driven rather than signal-driven.
+
+---
+
+### Q11: How is position sizing calculated?
+
+The bot uses a half-Kelly criterion approach:
+
+```
+kelly = (b*p - q) / b
+  where b = 2 (2:1 reward/risk ratio from 3% TP vs 2% SL)
+        p = signal confidence
+        q = 1 - p
+
+halfKelly = kelly * 0.5
+quantity = floor(capital * riskPerTrade * halfKelly / currentPrice)
+quantity = max(1, min(quantity, 8))
+```
+
+Half-Kelly is used instead of full Kelly to reduce variance. The 8-unit cap prevents any single trade from taking an outsized position. The 2% risk per trade limit ensures no single trade risks more than 2% of capital.
+
+---
+
+### Q12: How does the live P&L calculation work?
+
+The `getStatus()` method computes unrealized P&L on every call by iterating all open trades:
+
+```
+for each OPEN trade:
+  current = priceHistory[symbol].last
+  if BUY:  livePnl = (current - entryPrice) * quantity
+  if SELL: livePnl = (entryPrice - current) * quantity
+  unrealizedPnL += livePnl
+
+totalPnL = realizedPnL + unrealizedPnL
+```
+
+Each open trade in the `recentTrades` array is also enriched with its current live P&L and current price. The frontend polls this endpoint every 2 seconds, so the displayed numbers update continuously even before any trade is closed.
+
+Realized P&L only updates when a trade is closed via stop-loss or take-profit.
+
+---
+
+## Frontend and Real-Time Systems
+
+### Q13: How do you handle real-time updates in the frontend?
+
+The WebSocketService is a singleton that maintains a single connection to the backend. It supports multiple handlers per event type via a `Map<string, callback[]>` structure, unlike the backend's single-callback pattern.
+
+The server sends batched messages every 50ms in the format:
+```json
+{ "timestamp": 1234567890, "updates": { "orderbook": [...], "trade": [...] } }
+```
+
+The service iterates the updates object and dispatches each array to all registered handlers for that type.
+
+Reconnection uses exponential backoff starting at 1 second, doubling up to a maximum of 10 attempts.
+
+---
+
+### Q14: How do you prevent memory leaks in React components?
+
+Every `useEffect` that registers a WebSocket handler or sets an interval returns a cleanup function:
+
 ```typescript
 useEffect(() => {
   const handler = (data) => setOrderBook(data);
   wsService.on('orderbook', handler);
-  
+  const interval = setInterval(fetchPortfolio, 2000);
+
   return () => {
-    wsService.off('orderbook', handler);  // Cleanup!
+    wsService.off('orderbook', handler);
+    clearInterval(interval);
   };
 }, []);
 ```
 
-2. **Interval Cleanup:**
-```typescript
-useEffect(() => {
-  const interval = setInterval(() => {
-    updatePrices();
-  }, 3000);
-  
-  return () => clearInterval(interval);  // Cleanup!
-}, []);
-```
-
-3. **Abort Controllers for Fetch:**
-```typescript
-useEffect(() => {
-  const controller = new AbortController();
-  
-  fetch(url, { signal: controller.signal })
-    .then(data => setState(data));
-  
-  return () => controller.abort();  // Cleanup!
-}, []);
-```
-
-**Best Practices:**
-- Always return cleanup function from useEffect
-- Remove event listeners
-- Clear timers and intervals
-- Cancel pending requests
-- Unsubscribe from observables
+State arrays are bounded (100 candles, 30 trades) to prevent unbounded DOM growth. When the user switches symbols, stale state is cleared immediately before new data arrives.
 
 ---
 
-## Trading & Financial Concepts Questions
+## Trading and Financial Concepts
 
-### Q9: What is Price-Time priority and why is it important?
+### Q15: What is Price-Time priority?
 
-**Answer:**
-**Price-Time Priority** is the standard matching algorithm used by most exchanges:
+Price-Time priority is the standard matching algorithm used by most exchanges. It has two rules:
 
-**Rules:**
-1. **Price Priority:** Better prices get matched first
-   - Higher bids before lower bids
-   - Lower asks before higher asks
+Price priority: better prices are matched first. Higher bids before lower bids, lower asks before higher asks.
 
-2. **Time Priority:** At same price, earlier orders match first
-   - FIFO (First In, First Out)
-   - Rewards liquidity providers
+Time priority: at the same price level, earlier orders are matched first (FIFO). This rewards liquidity providers who post orders early.
 
-**Example:**
+Example:
 ```
-Order Book:
-Bids: $100 (Order A, 10:00), $100 (Order B, 10:01), $99 (Order C, 10:02)
+Bids: $100 (Order A, 10:00), $100 (Order B, 10:01), $99 (Order C)
 
-New Sell Order: $100, 15 units
+New sell order: $100, 15 units
 
-Matching:
-1. Order A gets 10 units (same price, earlier time)
-2. Order B gets 5 units (same price, later time)
-3. Order C gets 0 units (worse price)
+Result:
+  Order A fills 10 units (same price, earlier time)
+  Order B fills 5 units (same price, later time)
+  Order C fills 0 units (worse price)
 ```
 
-**Why Important:**
-- **Fairness:** Rewards early liquidity providers
-- **Transparency:** Predictable execution
-- **Market Quality:** Encourages tight spreads
-- **Regulatory:** Required by most exchanges
+This is important because it creates predictable, fair execution and encourages market participants to provide liquidity early.
 
 ---
 
-### Q10: Explain the difference between Market and Limit orders.
+### Q16: What is the difference between realized and unrealized P&L?
 
-**Answer:**
+Unrealized P&L is the mark-to-market value of open positions. It changes continuously as prices move but is not locked in until the position is closed.
 
-**Limit Order:**
-- **Definition:** Order with a specified price
-- **Execution:** Only at specified price or better
-- **Guarantee:** Price guaranteed, execution not guaranteed
-- **Use Case:** When you want price control
-
-**Example:**
 ```
-Buy Limit: $99.50, 10 units
-- Will buy at $99.50 or lower
-- Won't execute if market is at $100
-- Sits in order book until matched
+Unrealized P&L = (current price - average entry price) * position size
 ```
 
-**Market Order:**
-- **Definition:** Order without price specification
-- **Execution:** Immediately at best available price
-- **Guarantee:** Execution guaranteed, price not guaranteed
-- **Use Case:** When you want immediate execution
+Realized P&L is the profit or loss from closed positions. It is fixed once a trade is closed and does not change with subsequent price movements.
 
-**Example:**
 ```
-Buy Market: 10 units
-- Executes immediately
-- Takes best ask price(s)
-- May execute at multiple prices
+Realized P&L = (exit price - entry price) * quantity  for long
+Realized P&L = (entry price - exit price) * quantity  for short
 ```
 
-**Trade-offs:**
-
-| Aspect | Limit Order | Market Order |
-|--------|-------------|--------------|
-| Speed | Slower | Immediate |
-| Price Control | Yes | No |
-| Execution Guarantee | No | Yes |
-| Slippage Risk | None | High |
-| Use Case | Patient traders | Urgent trades |
+Total P&L = Realized + Unrealized. The AI bot panel shows both separately so you can distinguish locked-in gains from floating positions.
 
 ---
 
-### Q11: How do you calculate P&L (Profit and Loss)?
+### Q17: What is the Kelly Criterion and why use half-Kelly?
 
-**Answer:**
-**P&L Components:**
+The Kelly Criterion determines the optimal fraction of capital to bet to maximize long-term growth:
 
-1. **Realized P&L:**
-   - Profit/loss from closed positions
-   - Calculated when you sell
-   ```
-   Realized P&L = (Sell Price - Buy Price) × Quantity
-   ```
-
-2. **Unrealized P&L:**
-   - Profit/loss from open positions
-   - Mark-to-market value
-   ```
-   Unrealized P&L = (Current Price - Avg Cost) × Position
-   ```
-
-3. **Total P&L:**
-   ```
-   Total P&L = Realized P&L + Unrealized P&L
-   ```
-
-**Example:**
 ```
-Initial Capital: $100,000
-
-Trade 1: Buy 10 AAPL @ $100 = -$1,000
-Trade 2: Sell 5 AAPL @ $110 = +$550
-
-Realized P&L: (110 - 100) × 5 = $50
-Unrealized P&L: (Current $105 - $100) × 5 = $25
-Total P&L: $50 + $25 = $75
-
-Portfolio Value: $100,000 + $75 = $100,075
+f = (b*p - q) / b
+  where b = reward/risk ratio
+        p = probability of winning
+        q = 1 - p
 ```
 
-**Implementation:**
-```typescript
-calculatePnL(portfolio: Portfolio) {
-  let unrealizedPnL = 0;
-  
-  for (const [symbol, quantity] of portfolio.positions) {
-    const marketValue = quantity * currentPrice;
-    const costBasis = quantity * avgCost;
-    unrealizedPnL += (marketValue - costBasis);
-  }
-  
-  return {
-    realized: portfolio.realizedPnL,
-    unrealized: unrealizedPnL,
-    total: portfolio.realizedPnL + unrealizedPnL
-  };
-}
-```
+Full Kelly maximizes expected log growth but produces high variance and large drawdowns. Half-Kelly (f * 0.5) sacrifices some expected return in exchange for significantly lower variance and drawdown. For a trading bot where the probability estimates are imperfect, half-Kelly is the standard practical choice.
 
 ---
 
-## Performance & Scalability Questions
+## Performance and Scalability
 
-### Q12: How would you scale this system to handle 1 million users?
+### Q18: What are the current performance bottlenecks?
 
-**Answer:**
-**Current Bottlenecks:**
-- Single Node.js process
-- In-memory order book
-- Single WebSocket server
+The main bottlenecks are:
 
-**Scaling Strategy:**
+Single Node.js process: CPU-bound operations (sorting price levels, computing indicators) block the event loop. Worker threads would help for heavy computation.
 
-**1. Horizontal Scaling:**
+In-memory state: the order book and price history are lost on restart. Redis would provide persistence and allow multiple processes to share state.
+
+Single onTrade callback: the MatchingEngine only supports one subscriber. A proper EventEmitter would allow cleaner multi-subscriber patterns.
+
+WebSocket broadcasting is O(n) for n clients. Redis Pub/Sub would allow multiple WebSocket servers to fan out to their own client sets.
+
+---
+
+### Q19: How would you scale this to handle 1 million users?
+
 ```
-Load Balancer
-    ↓
-[API Server 1] [API Server 2] [API Server 3]
-    ↓              ↓              ↓
-    Redis (Shared State)
-    ↓
-Matching Engine (Separate Service)
+Load Balancer (nginx or HAProxy)
+  |
+  API Server cluster (stateless, horizontal scale)
+  |
+  Redis (shared order book snapshots, session state, Pub/Sub)
+  |
+  Kafka (order queue, decouples submission from matching)
+  |
+  Matching Engine cluster (one process per symbol, isolated)
+  |
+  PostgreSQL + TimescaleDB (trade history, candles, user accounts)
+
+WebSocket cluster:
+  Multiple WS servers, each subscribed to Redis Pub/Sub
+  Sticky sessions via load balancer for connection affinity
 ```
 
-**2. Database Layer:**
-- **Redis:** Order book cache, session storage
-- **PostgreSQL:** Trade history, user accounts
-- **TimescaleDB:** Time-series data (candles, prices)
-
-**3. Message Queue:**
-```
-Orders → Kafka → Matching Engine → Kafka → Broadcast Workers
-```
-
-**4. WebSocket Scaling:**
-- Multiple WebSocket servers
-- Redis Pub/Sub for message distribution
-- Sticky sessions via load balancer
-
-**5. Caching:**
-- CDN for frontend assets
-- Redis for order book snapshots
-- In-memory cache for hot data
-
-**6. Microservices:**
-- Matching Engine service
-- Market Data service
-- User Management service
-- Portfolio service
-- Analytics service
-
-**Expected Performance:**
-- 100,000+ orders/second
+Expected targets at scale:
+- 100,000+ orders per second
 - 1M+ concurrent WebSocket connections
 - < 10ms matching latency
 - 99.99% uptime
 
 ---
 
-### Q13: What are the performance bottlenecks in your current implementation?
+## Technical Implementation
 
-**Answer:**
-**Identified Bottlenecks:**
+### Q20: Walk through your Docker setup.
 
-1. **Single-Threaded Node.js:**
-   - CPU-bound operations block event loop
-   - Solution: Worker threads for heavy computation
+The backend uses a multi-stage build. The builder stage installs all dependencies and compiles TypeScript. The production stage copies only the compiled dist folder and installs production dependencies only, resulting in a smaller image without build tools.
 
-2. **In-Memory Order Book:**
-   - Limited by RAM
-   - No persistence
-   - Solution: Redis or dedicated database
+The frontend uses a similar pattern: Vite builds the React app in the builder stage, then nginx serves the static files in the production stage.
 
-3. **WebSocket Broadcasting:**
-   - O(n) for n clients
-   - Solution: Pub/Sub pattern, message batching
+The analytics service uses a Python 3.11 slim base image with pip installing the requirements.
 
-4. **No Database:**
-   - Trade history lost on restart
-   - Solution: PostgreSQL for persistence
-
-5. **Synchronous Matching:**
-   - Blocks on large orders
-   - Solution: Async processing with queues
-
-**Optimization Techniques Applied:**
-
-1. **Message Batching:**
-   - Reduced WebSocket calls by 95%
-   - 50ms batching window
-
-2. **Hash Map for Orders:**
-   - O(1) order lookup
-   - Fast cancellations
-
-3. **Efficient Data Structures:**
-   - Map for price levels
-   - Array for FIFO queue
-
-4. **Lazy Evaluation:**
-   - Calculate P&L on-demand
-   - Cache expensive calculations
-
-**Monitoring:**
-- Response time: < 100ms (p99)
-- Memory usage: < 256MB
-- CPU usage: < 50%
-- WebSocket latency: < 50ms
+Docker Compose wires the three services on a bridge network called exchange-network. The analytics service connects to the backend using the hostname `backend` (Docker internal DNS). The health check uses a Node.js HTTP request rather than curl because curl is not available in the Alpine image.
 
 ---
 
-## Technical Implementation Questions
+### Q21: What was the hardest bug you fixed in this project?
 
-### Q14: Walk me through your Docker setup.
+The AI bot was not trading despite the system generating thousands of trades per second.
 
-**Answer:**
-**Multi-Stage Build:**
+The root cause was that `MatchingEngine.onTrade` is a single callback, not an EventEmitter. When the bot called `engine.onTrade()` to subscribe, it overwrote the server's existing callback, breaking portfolio updates and WebSocket broadcasting. When the server's callback was registered first, the bot never received any data.
 
-```dockerfile
-# Stage 1: Build
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-
-# Stage 2: Production
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install --omit=dev
-COPY --from=builder /app/dist ./dist
-CMD ["node", "dist/server.js"]
-```
-
-**Benefits:**
-- Smaller image size (only production deps)
-- Faster builds (layer caching)
-- Security (no build tools in production)
-
-**Docker Compose:**
-```yaml
-services:
-  backend:
-    build: ./backend
-    ports: ["8080:8080"]
-    environment:
-      - NODE_ENV=production
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      
-  frontend:
-    build: ./frontend
-    ports: ["3000:80"]
-    depends_on: [backend]
-```
-
-**Networking:**
-- Custom bridge network
-- Service discovery by name
-- Internal communication
-
-**Health Checks:**
-- Backend: HTTP endpoint
-- Automatic restart on failure
-- Graceful shutdown (SIGTERM)
+The fix was the feedTrade injection pattern. The server's onTrade callback explicitly calls `aiBot.feedTrade(symbol, trade)` for every trade. The bot does not subscribe to the engine at all — it receives data pushed to it. This keeps the server's callback intact and gives the bot a clean data feed without any subscription conflict.
 
 ---
 
-### Q15: How do you handle errors and edge cases?
+### Q22: What would you improve with more time?
 
-**Answer:**
-**Error Handling Strategy:**
+Short term:
+- PostgreSQL for trade persistence across restarts
+- Redis for order book caching and WebSocket scaling
+- JWT authentication with multi-user accounts
+- Stop-limit, IOC, and FOK order types
+- Unit tests for AI bot indicator calculations
 
-**1. Input Validation:**
-```typescript
-if (!userId || !type || !side || !quantity) {
-  res.status(400).json({ error: 'Missing required fields' });
-  return;
-}
+Medium term:
+- Backtesting framework to evaluate bot strategies on historical data
+- Prometheus metrics and Grafana dashboards
+- Kubernetes deployment with horizontal pod autoscaling
+- Bot strategy parameter tuning via API
 
-if (quantity <= 0) {
-  throw new Error('Quantity must be positive');
-}
-```
-
-**2. Try-Catch Blocks:**
-```typescript
-try {
-  const result = matchingEngine.submitOrder(request);
-  res.json(result);
-} catch (error: any) {
-  console.error('Order submission failed:', error);
-  res.status(400).json({ error: error.message });
-}
-```
-
-**3. WebSocket Error Handling:**
-```typescript
-ws.on('error', (error) => {
-  console.error('WebSocket error:', error);
-  this.clients.delete(ws);
-});
-
-// Reconnection logic
-private attemptReconnect() {
-  if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-    console.error('Max reconnection attempts reached');
-    return;
-  }
-  
-  const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
-  setTimeout(() => this.connect(), delay);
-}
-```
-
-**4. Edge Cases:**
-
-**Insufficient Funds:**
-```typescript
-if (side === OrderSide.BUY) {
-  const requiredCash = price * quantity;
-  if (!portfolioManager.hasSufficientBuyingPower(userId, requiredCash)) {
-    res.status(400).json({ error: 'Insufficient buying power' });
-    return;
-  }
-}
-```
-
-**Order Not Found:**
-```typescript
-const order = orderBook.getOrder(orderId);
-if (!order) {
-  throw new Error('Order not found');
-}
-```
-
-**Unauthorized Cancellation:**
-```typescript
-if (order.userId !== request.userId) {
-  throw new Error('Unauthorized: Cannot cancel another user\'s order');
-}
-```
-
-**5. Graceful Shutdown:**
-```typescript
-process.on('SIGTERM', () => {
-  console.log('Shutting down gracefully...');
-  marketGenerator.stop();
-  wsServer.close();
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
-```
-
----
-
-### Q16: How would you add authentication to this system?
-
-**Answer:**
-**Authentication Strategy:**
-
-**1. JWT (JSON Web Tokens):**
-```typescript
-// Login endpoint
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  
-  const user = await validateCredentials(email, password);
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-  
-  const token = jwt.sign(
-    { userId: user.id, email: user.email },
-    process.env.JWT_SECRET,
-    { expiresIn: '24h' }
-  );
-  
-  res.json({ token, user });
-});
-```
-
-**2. Middleware:**
-```typescript
-const authMiddleware = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-  
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-// Protected routes
-app.post('/api/orders', authMiddleware, handleOrderSubmission);
-```
-
-**3. WebSocket Authentication:**
-```typescript
-wss.on('connection', (ws, req) => {
-  const token = new URL(req.url, 'ws://localhost').searchParams.get('token');
-  
-  try {
-    const user = jwt.verify(token, process.env.JWT_SECRET);
-    ws.user = user;
-  } catch (error) {
-    ws.close(1008, 'Unauthorized');
-    return;
-  }
-  
-  // Connection established
-});
-```
-
-**4. Security Best Practices:**
-- HTTPS only in production
-- Secure cookie flags (httpOnly, secure, sameSite)
-- Rate limiting (express-rate-limit)
-- CORS configuration
-- Input sanitization
-- SQL injection prevention (parameterized queries)
-- XSS protection (Content Security Policy)
-
----
-
-## Behavioral & Project Questions
-
-### Q17: What was the most challenging part of this project?
-
-**Answer:**
-**Challenge:** Implementing real-time WebSocket updates while maintaining 60 FPS rendering
-
-**Problem:**
-- Initial implementation sent every update individually
-- 100+ messages/second overwhelmed the frontend
-- UI became laggy and unresponsive
-- React re-rendered too frequently
-
-**Solution:**
-1. **Message Batching:**
-   - Queue messages for 50ms
-   - Send batched updates
-   - Reduced network calls by 95%
-
-2. **React Optimization:**
-   - Used React.memo for expensive components
-   - Implemented useMemo for calculations
-   - Debounced state updates
-
-3. **Selective Updates:**
-   - Only update changed data
-   - Virtual DOM handles diffing
-   - Avoid unnecessary re-renders
-
-**Result:**
-- Smooth 60 FPS rendering
-- < 100ms latency maintained
-- Can handle 100+ messages/second
-- Better user experience
-
-**Learning:**
-- Performance optimization is crucial for real-time apps
-- Batching is powerful for high-frequency updates
-- Profiling tools (React DevTools) are essential
-
----
-
-### Q18: How did you test your matching engine?
-
-**Answer:**
-**Testing Strategy:**
-
-**1. Unit Tests (Jest):**
-```typescript
-describe('OrderBook', () => {
-  it('should match crossing limit orders', () => {
-    const buyOrder = createOrder({ side: BUY, price: 100, qty: 10 });
-    const sellOrder = createOrder({ side: SELL, price: 100, qty: 5 });
-    
-    orderBook.addOrder(buyOrder);
-    const trades = orderBook.addOrder(sellOrder);
-    
-    expect(trades).toHaveLength(1);
-    expect(trades[0].quantity).toBe(5);
-    expect(buyOrder.remainingQuantity).toBe(5);
-  });
-  
-  it('should maintain price-time priority', () => {
-    // Test FIFO at same price level
-  });
-});
-```
-
-**2. Integration Tests:**
-- Test full order flow (API → Engine → WebSocket)
-- Test portfolio updates after trades
-- Test concurrent order submissions
-
-**3. Load Testing:**
-```bash
-# Apache Bench
-ab -n 10000 -c 100 http://localhost:8080/api/orders
-
-# Results:
-# - 1000+ requests/second
-# - 50ms average response time
-# - 0% error rate
-```
-
-**4. Manual Testing:**
-- Place various order types
-- Test edge cases (insufficient funds, invalid prices)
-- Test WebSocket reconnection
-- Test with multiple concurrent users
-
-**5. Property-Based Testing:**
-- Generate random order sequences
-- Verify invariants (no negative positions, P&L accuracy)
-- Ensure order book consistency
-
----
-
-### Q19: What would you improve if you had more time?
-
-**Answer:**
-**Short-term Improvements (1-2 weeks):**
-
-1. **Persistence:**
-   - Add PostgreSQL for trade history
-   - Redis for order book snapshots
-   - Survive restarts
-
-2. **Advanced Order Types:**
-   - Stop-loss orders
-   - Stop-limit orders
-   - Immediate-or-Cancel (IOC)
-   - Fill-or-Kill (FOK)
-
-3. **Better Analytics:**
-   - Trading volume charts
-   - Price history graphs
-   - Performance metrics dashboard
-
-4. **User Management:**
-   - Authentication (JWT)
-   - Multiple user accounts
-   - Account settings
-
-**Long-term Improvements (1-3 months):**
-
-1. **Scalability:**
-   - Microservices architecture
-   - Kafka for message queue
-   - Redis Pub/Sub for WebSocket
-   - Load balancing
-
-2. **Advanced Features:**
-   - Options trading
-   - Margin trading
-   - Algorithmic trading API
-   - Backtesting framework
-
-3. **Monitoring:**
-   - Prometheus metrics
-   - Grafana dashboards
-   - Error tracking (Sentry)
-   - Performance monitoring (New Relic)
-
-4. **Mobile App:**
-   - React Native app
-   - Push notifications
-   - Biometric authentication
-
----
-
-### Q20: Why should we hire you based on this project?
-
-**Answer:**
-This project demonstrates:
-
-**1. Full-Stack Expertise:**
-- Built complete system from scratch
-- Frontend (React, TypeScript, WebSocket)
-- Backend (Node.js, Express, real-time systems)
-- DevOps (Docker, Docker Compose)
-
-**2. System Design Skills:**
-- Designed scalable architecture
-- Implemented efficient data structures
-- Optimized for performance (< 1ms matching)
-- Real-time systems experience
-
-**3. Financial Domain Knowledge:**
-- Understanding of trading systems
-- Matching engine implementation
-- Market microstructure
-- Risk management (P&L tracking)
-
-**4. Problem-Solving:**
-- Overcame WebSocket performance issues
-- Implemented complex algorithms (GBM, matching)
-- Handled edge cases and errors
-
-**5. Production-Ready Code:**
-- Clean, maintainable TypeScript
-- Comprehensive error handling
-- Docker deployment
-- Documentation
-
-**6. Learning Ability:**
-- Self-taught financial concepts
-- Researched best practices
-- Implemented industry-standard algorithms
-
-**Value I Bring:**
-- Can build complex systems independently
-- Strong foundation in both frontend and backend
-- Experience with real-time applications
-- Ready to contribute from day one
+Long term:
+- Options pricing module using Black-Scholes
+- Margin trading with leverage
+- Algorithmic trading API with Python SDK
+- Mobile app with push notifications for bot alerts
 
 ---
 
 ## Additional Resources
 
-### Recommended Reading:
-- "Building Trading Systems" by Kevin Davey
-- "Flash Boys" by Michael Lewis
-- "Designing Data-Intensive Applications" by Martin Kleppmann
+Recommended reading:
+- Designing Data-Intensive Applications by Martin Kleppmann
+- Flash Boys by Michael Lewis
+- Algorithmic Trading by Ernest Chan
 
-### Technologies to Learn Next:
-- Rust (for ultra-low latency)
-- Kafka (for message streaming)
-- Redis (for caching)
-- Kubernetes (for orchestration)
+Technologies to explore next:
+- Rust for ultra-low latency matching engines
+- Apache Kafka for high-throughput order queuing
+- Redis for distributed state and Pub/Sub
+- Kubernetes for container orchestration at scale
 
 ---
 
-**Prepared by:** Your Name  
-**Project:** Synthetic Exchange Trading Platform  
-**Date:** May 2026
+Prepared by: Your Name
+Project: Synthetic Exchange Trading Platform
+Date: May 2026
