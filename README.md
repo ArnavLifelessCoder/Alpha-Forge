@@ -1,4 +1,4 @@
-# Synthetic Exchange
+# Alpha-Forge
 
 A production-grade, real-time multi-asset trading platform with live market data, a high-performance matching engine, an AI trading bot, and a Streamlit analytics dashboard.
 
