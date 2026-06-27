@@ -21,8 +21,6 @@ docker-compose up --build
 # Analytics Dashboard:  http://localhost:8501
 # Backend API:          http://localhost:8080
 
-#Backend - https://algo-portal-final-1xvi.onrender.com - On Render
-#Frontend - https://algo-portal-rg4ck4qma-arnav-gawade-s-projects.vercel.app/ - On Vercel
 ```
 
 ---
