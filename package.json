@@ -15,7 +15,15 @@
     "dev:backend": "cd backend && npm install && npm run dev",
     "dev:frontend": "cd frontend && npm install && npm run dev",
     "test:backend": "cd backend && npm test",
-    "install:all": "cd backend && npm install && cd ../frontend && npm install"
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+
+    "native:build": "cd native && powershell -ExecutionPolicy Bypass -File build.ps1",
+    "ml:setup": "python -m venv ml/.venv && ml/.venv/Scripts/python -m pip install -r ml/requirements.txt",
+    "ml:ingest": "ml/.venv/Scripts/python -m ml.ingest.poller",
+    "ml:train": "ml/.venv/Scripts/python -m ml.training.train --promote",
+    "ml:serve": "ml/.venv/Scripts/python -m ml.serving.app",
+    "ml:mlflow": "ml/.venv/Scripts/python -m mlflow ui --backend-store-uri sqlite:///ml/mlruns/mlflow.db --port 5000",
+    "ml:test": "ml/.venv/Scripts/python -m ml.tests.test_native_parity"
   },
   "keywords": [
     "trading",

@@ -1,10 +1,14 @@
-import { Activity, Wifi, WifiOff, BarChart3, Globe, ExternalLink, PieChart } from 'lucide-react';
+import { Wifi, WifiOff, BarChart3, Globe, ExternalLink, PieChart, LineChart, Brain } from 'lucide-react';
+
+export type AppView = 'terminal' | 'ml';
 
 interface HeaderProps {
   connected: boolean;
+  view: AppView;
+  onViewChange: (v: AppView) => void;
 }
 
-export default function Header({ connected }: HeaderProps) {
+export default function Header({ connected, view, onViewChange }: HeaderProps) {
   return (
     <header className="bg-slate-900/95 backdrop-blur-sm border-b border-slate-700/50 sticky top-0 z-50">
       <div className="container mx-auto px-4 py-3">
@@ -20,28 +24,38 @@ export default function Header({ connected }: HeaderProps) {
               )}
             </div>
             <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
-                Synthetic Exchange
+              <h1 className="text-lg font-bold bg-gradient-to-r from-ink to-brand bg-clip-text text-transparent">
+                AlphaForge
               </h1>
               <p className="text-[10px] text-slate-400 -mt-0.5 flex items-center space-x-1">
                 <Globe className="w-2.5 h-2.5" />
-                <span>Real-Time Multi-Asset Trading Platform</span>
+                <span>MLOps Trading Intelligence Platform</span>
               </p>
             </div>
           </div>
 
           {/* Nav + Status */}
           <div className="flex items-center space-x-3">
-            {/* Info badges */}
-            <div className="hidden md:flex items-center space-x-2 text-xs">
-              <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-800/80 rounded-lg border border-slate-700/50">
-                <Activity className="w-3 h-3 text-indigo-400" />
-                <span className="text-slate-300">Live Trading</span>
-              </div>
-              <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-800/80 rounded-lg border border-slate-700/50">
-                <Globe className="w-3 h-3 text-purple-400" />
-                <span className="text-slate-300">12 Markets</span>
-              </div>
+            {/* View tabs */}
+            <div className="flex items-center bg-slate-800/80 rounded-lg border border-slate-700/50 p-0.5">
+              <button
+                onClick={() => onViewChange('terminal')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  view === 'terminal' ? 'bg-indigo-600/30 text-indigo-200' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <LineChart className="w-3.5 h-3.5" />
+                <span>Terminal</span>
+              </button>
+              <button
+                onClick={() => onViewChange('ml')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  view === 'ml' ? 'bg-indigo-600/30 text-indigo-200' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Brain className="w-3.5 h-3.5" />
+                <span>ML Intelligence</span>
+              </button>
             </div>
 
             {/* Analytics Dashboard Button */}

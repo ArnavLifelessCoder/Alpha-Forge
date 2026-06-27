@@ -40,3 +40,12 @@ tmp/
 
 # Private documentation
 INTERVIEW_QUESTIONS.md
+
+# AlphaForge MLOps stack — generated artifacts
+ml/.venv/
+ml/.data/
+ml/mlruns/
+native/bin/
+__pycache__/
+*.py[cod]
+.pytest_cache/

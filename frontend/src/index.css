@@ -7,9 +7,9 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #0f172a;
+  color-scheme: light;
+  color: #23201B;
+  background-color: #F5F2EC;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -34,16 +34,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: #EFEAE1;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: #D6CDBD;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #C2B6A2;
 }
 
 /* Custom scrollbar (thin version) */
@@ -56,7 +56,7 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #D6CDBD;
   border-radius: 2px;
 }
 

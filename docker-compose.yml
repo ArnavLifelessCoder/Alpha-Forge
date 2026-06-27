@@ -12,6 +12,7 @@ services:
       - PORT=8080
       - MARKET_GENERATOR_ENABLED=true
       - TRADING_BOTS_ENABLED=true
+      - ML_SERVING_URL=http://ml-serving:8090
     networks:
       - exchange-network
     healthcheck:
@@ -50,6 +51,45 @@ services:
       - BACKEND_URL=http://backend:8080
     restart: unless-stopped
 
+  # AlphaForge MLOps — model serving + monitoring + auto-retrain (C++ inference)
+  ml-serving:
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
+    image: alphaforge-ml
+    ports:
+      - "8090:8090"
+    depends_on:
+      - backend
+    networks:
+      - exchange-network
+    environment:
+      - BACKEND_URL=http://backend:8080
+      - ALPHAFORGE_HORIZON=30
+      - ALPHAFORGE_AUTO_RETRAIN=true
+      - ALPHAFORGE_RETRAIN_INTERVAL=600
+    volumes:
+      - ml-data:/app/ml/.data
+    restart: unless-stopped
+
+  # Feature-store ingest — polls the backend REST API into the feature store
+  ml-ingest:
+    image: alphaforge-ml
+    depends_on:
+      - backend
+      - ml-serving
+    networks:
+      - exchange-network
+    environment:
+      - BACKEND_URL=http://backend:8080
+    volumes:
+      - ml-data:/app/ml/.data
+    command: ["python", "-m", "ml.ingest.poller"]
+    restart: unless-stopped
+
 networks:
   exchange-network:
     driver: bridge
+
+volumes:
+  ml-data:

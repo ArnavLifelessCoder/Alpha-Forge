@@ -84,6 +84,38 @@ class ApiService {
     if (!response.ok) throw new Error('Failed to cancel order');
     return response.json();
   }
+
+  // =============== MLOps endpoints (proxied through the backend) ===============
+  private async mlGet(path: string): Promise<any> {
+    try {
+      const res = await fetch(`${API_URL}${path}`);
+      if (!res.ok) return { available: false };
+      return await res.json();
+    } catch {
+      return { available: false };
+    }
+  }
+
+  getMLStatus() { return this.mlGet('/api/ml/status'); }
+  getMLPredictions() { return this.mlGet('/api/ml/predictions'); }
+  getMLModelInfo() { return this.mlGet('/api/ml/model-info'); }
+  getMLDrift() { return this.mlGet('/api/ml/monitoring/drift'); }
+  getMLPerformance() { return this.mlGet('/api/ml/monitoring/performance'); }
+  getMLExperiments() { return this.mlGet('/api/ml/experiments'); }
+  getMLRegistry() { return this.mlGet('/api/ml/registry'); }
+
+  async triggerRetrain(promote = true): Promise<any> {
+    try {
+      const res = await fetch(`${API_URL}/api/ml/retrain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ promote }),
+      });
+      return await res.json();
+    } catch {
+      return { available: false };
+    }
+  }
 }
 
 export const apiService = new ApiService();

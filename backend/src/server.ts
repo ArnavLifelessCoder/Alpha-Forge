@@ -9,10 +9,12 @@ import { CandleGenerator } from './market/CandleGenerator';
 import { WebSocketServer } from './websocket/WebSocketServer';
 import { RealMarketDataService } from './market/RealMarketData';
 import { AITradingBot } from './bots/AITradingBot';
+import { MLClient } from './ml/MLClient';
 import { OrderType, OrderSide } from './types';
 
 const PORT = process.env.PORT || 8080;
 const MARKET_GENERATOR_ENABLED = process.env.MARKET_GENERATOR_ENABLED !== 'false';
+const ML_SERVING_URL = process.env.ML_SERVING_URL || 'http://localhost:8090';
 
 // Initialize core components
 const matchingEngine = new MatchingEngine();
@@ -21,6 +23,14 @@ const candleGenerator = new CandleGenerator(5); // 5-second candles
 const marketGenerator = new MarketGenerator(matchingEngine);
 const realMarketData = new RealMarketDataService();
 const aiBot = new AITradingBot();
+
+// Model-serving bridge (AlphaForge MLOps stack). Degrades gracefully if the
+// Python serving layer isn't running — the bot falls back to heuristics.
+const mlClient = new MLClient({
+  servingUrl: ML_SERVING_URL,
+  symbols: realMarketData.getSupportedSymbols(),
+  pollMs: 2000,
+});
 
 // Multi-symbol engines
 const symbolEngines: Map<string, { engine: MatchingEngine; generator: MarketGenerator; candleGen: CandleGenerator }> = new Map();
@@ -545,6 +555,74 @@ app.post('/api/bot/strategies', (req, res) => {
   }
 });
 
+// =============== ML / MLOps ENDPOINTS ===============
+// These proxy the AlphaForge model-serving layer so the frontend uses one origin.
+
+/** Quick status: is the model server reachable? */
+app.get('/api/ml/status', (_req, res) => {
+  res.json({
+    available: mlClient.available,
+    servingUrl: mlClient.baseUrl,
+    modelInfo: mlClient.getModelInfo(),
+  });
+});
+
+/** All cached live predictions (one per symbol). */
+app.get('/api/ml/predictions', (_req, res) => {
+  res.json({
+    available: mlClient.available,
+    predictions: mlClient.getAllPredictions(),
+  });
+});
+
+/** Single prediction (symbol via query param to allow "BTC/USD"). */
+app.get('/api/ml/prediction', (req, res) => {
+  const symbol = req.query.symbol as string;
+  if (!symbol) {
+    res.status(400).json({ error: 'symbol query param required' });
+    return;
+  }
+  res.json(mlClient.getPrediction(symbol) || { symbol, available: false });
+});
+
+/** Model registry / champion info. */
+app.get('/api/ml/model-info', async (_req, res) => {
+  const info = mlClient.getModelInfo() || (await mlClient.proxy('/model/info'));
+  res.json(info || { available: false, error: 'model server offline' });
+});
+
+/** Data-drift monitoring. */
+app.get('/api/ml/monitoring/drift', async (_req, res) => {
+  const d = await mlClient.proxy('/monitoring/drift');
+  res.json(d || { available: false, error: 'model server offline' });
+});
+
+/** Live prediction accuracy / calibration. */
+app.get('/api/ml/monitoring/performance', async (req, res) => {
+  const window = req.query.window ? `?window=${parseInt(req.query.window as string)}` : '';
+  const d = await mlClient.proxy(`/monitoring/performance${window}`);
+  res.json(d || { available: false, error: 'model server offline' });
+});
+
+/** Experiment-tracking run history. */
+app.get('/api/ml/experiments', async (_req, res) => {
+  const d = await mlClient.proxy('/experiments');
+  res.json(d || { available: false, error: 'model server offline' });
+});
+
+/** Champion/challenger registry. */
+app.get('/api/ml/registry', async (_req, res) => {
+  const d = await mlClient.proxy('/registry/models');
+  res.json(d || { available: false, error: 'model server offline' });
+});
+
+/** Trigger a retrain (champion/challenger). */
+app.post('/api/ml/retrain', async (req, res) => {
+  const promote = req.body?.promote !== false;
+  const d = await mlClient.proxyPost('/orchestration/retrain', { promote });
+  res.json(d || { available: false, error: 'model server offline' });
+});
+
 // =============== Start Server ===============
 
 server.listen(PORT, () => {
@@ -572,6 +650,9 @@ server.listen(PORT, () => {
     console.log('✅ Real market data service started');
   });
 
+  // Start polling the model-serving layer (no-op if it's offline).
+  mlClient.start();
+
   // Start market generators if enabled
   if (MARKET_GENERATOR_ENABLED) {
     setTimeout(() => {
@@ -587,11 +668,13 @@ server.listen(PORT, () => {
       for (const [symbol, { engine }] of symbolEngines) {
         aiBot.registerSymbol(symbol, engine);
       }
-      // Start AI bot automatically
+      // Give the bot the model-serving client, then start it
+      aiBot.setMLClient(mlClient);
       aiBot.start();
-      
+
       console.log('✅ All market generators started');
       console.log('🤖 AI Trading Bot registered with all symbols');
+      console.log(`🧠 ML signal source: ${ML_SERVING_URL} (heuristic fallback if offline)`);
     }, 2000);
   }
 });
@@ -600,6 +683,7 @@ server.listen(PORT, () => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   aiBot.stop();
+  mlClient.stop();
   marketGenerator.stop();
   realMarketData.stop();
   for (const { generator } of symbolEngines.values()) {
@@ -615,6 +699,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
   aiBot.stop();
+  mlClient.stop();
   marketGenerator.stop();
   realMarketData.stop();
   for (const { generator } of symbolEngines.values()) {

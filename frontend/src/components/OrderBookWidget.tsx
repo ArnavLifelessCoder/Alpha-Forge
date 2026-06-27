@@ -58,7 +58,7 @@ export default function OrderBookWidget({ orderBook }: OrderBookWidgetProps) {
       {/* Spread Indicator */}
       {spread !== null && (
         <div className="flex items-center justify-center py-1.5 my-1 border-y border-slate-700/50">
-          <span className="text-xs font-bold text-white">${((asks[0]?.price || 0 + (bids[0]?.price || 0)) / 2).toFixed(2)}</span>
+          <span className="text-xs font-bold text-ink">${((asks[0]?.price || 0 + (bids[0]?.price || 0)) / 2).toFixed(2)}</span>
           <span className="text-[10px] text-slate-400 ml-2">±${(spread / 2).toFixed(3)}</span>
         </div>
       )}

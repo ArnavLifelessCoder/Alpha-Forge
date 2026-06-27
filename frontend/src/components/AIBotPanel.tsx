@@ -19,6 +19,11 @@ interface BotStatus {
   activeStrategies: string[];
   positions: Record<string, number>;
   recentTrades: any[];
+  mlEnabled?: boolean;
+  modelVersion?: string | null;
+  mlTrades?: number;
+  heuristicTrades?: number;
+  signalSource?: 'ml' | 'heuristic';
 }
 
 const STRATEGY_INFO: Record<string, { name: string; icon: any; description: string; color: string }> = {
@@ -157,6 +162,23 @@ export default function AIBotPanel() {
             </button>
           </>
         )}
+      </div>
+
+      {/* ML signal source */}
+      <div className={`flex items-center justify-between mb-3 px-2.5 py-2 rounded-lg border ${
+        status.mlEnabled ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-900/40 border-slate-700/30'
+      }`}>
+        <div className="flex items-center space-x-1.5">
+          <Brain className={`w-3.5 h-3.5 ${status.mlEnabled ? 'text-indigo-400' : 'text-slate-500'}`} />
+          <span className="text-[11px] font-medium text-slate-200">
+            {status.mlEnabled ? `ML model ${status.modelVersion || ''}` : 'Heuristic mode'}
+          </span>
+        </div>
+        <span className="text-[10px] text-slate-400">
+          {status.mlEnabled
+            ? `${status.mlTrades ?? 0} ML / ${status.heuristicTrades ?? 0} TA`
+            : 'model offline'}
+        </span>
       </div>
 
       {/* Performance Metrics */}

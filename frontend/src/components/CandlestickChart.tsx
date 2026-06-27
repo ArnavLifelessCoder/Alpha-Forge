@@ -55,7 +55,7 @@ export default function CandlestickChart({ candles, symbol = 'BTC/USD' }: Candle
         wickHigh: candle.high,
         wickLow: candle.low,
         bullish,
-        color: bullish ? '#22c55e' : '#ef4444',
+        color: bullish ? '#1A7F4B' : '#D23B3B',
       };
     });
   }, [candles]);
@@ -149,17 +149,17 @@ export default function CandlestickChart({ candles, symbol = 'BTC/USD' }: Candle
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E8E1D6" />
               <XAxis 
                 dataKey="time" 
-                stroke="#475569"
-                tick={{ fontSize: 10, fill: '#64748b' }}
+                stroke="#C2B6A2"
+                tick={{ fontSize: 10, fill: '#9A8F7E' }}
                 interval="preserveStartEnd"
               />
               <YAxis 
                 yAxisId="price"
-                stroke="#475569"
-                tick={{ fontSize: 10, fill: '#64748b' }}
+                stroke="#C2B6A2"
+                tick={{ fontSize: 10, fill: '#9A8F7E' }}
                 domain={['auto', 'auto']}
                 tickFormatter={(value) => `$${value.toFixed(0)}`}
                 orientation="right"
@@ -168,20 +168,20 @@ export default function CandlestickChart({ candles, symbol = 'BTC/USD' }: Candle
                 <YAxis 
                   yAxisId="volume"
                   orientation="left"
-                  stroke="#475569"
-                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  stroke="#C2B6A2"
+                  tick={{ fontSize: 10, fill: '#9A8F7E' }}
                   domain={[0, 'auto']}
                   tickFormatter={(value) => value.toFixed(0)}
                 />
               )}
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #334155',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E8E1D6',
                   borderRadius: '0.75rem',
                   padding: '12px',
                 }}
-                labelStyle={{ color: '#94a3b8', marginBottom: '8px' }}
+                labelStyle={{ color: '#5E564A', marginBottom: '8px' }}
                 formatter={(value: number, name: string) => {
                   if (name === 'volume') return [value.toFixed(2), 'Volume'];
                   return [`$${value.toFixed(2)}`, name.toUpperCase()];
@@ -193,7 +193,7 @@ export default function CandlestickChart({ candles, symbol = 'BTC/USD' }: Candle
                 <Bar 
                   yAxisId="volume"
                   dataKey="volume" 
-                  fill="#6366f1" 
+                  fill="#0E7C86" 
                   opacity={0.2}
                   name="volume"
                 />
@@ -204,7 +204,7 @@ export default function CandlestickChart({ candles, symbol = 'BTC/USD' }: Candle
                 yAxisId="price"
                 type="monotone" 
                 dataKey="close" 
-                stroke="#6366f1" 
+                stroke="#0E7C86" 
                 strokeWidth={2}
                 dot={false}
                 name="close"
@@ -216,7 +216,7 @@ export default function CandlestickChart({ candles, symbol = 'BTC/USD' }: Candle
                 type="monotone"
                 dataKey="high"
                 stroke="transparent"
-                fill="#22c55e"
+                fill="#1A7F4B"
                 fillOpacity={0.05}
                 name="high"
               />
@@ -228,7 +228,7 @@ export default function CandlestickChart({ candles, symbol = 'BTC/USD' }: Candle
                     yAxisId="price"
                     type="monotone" 
                     dataKey="sma7" 
-                    stroke="#f59e0b" 
+                    stroke="#C77D11"
                     strokeWidth={1}
                     strokeDasharray="3 3"
                     dot={false}
@@ -239,7 +239,7 @@ export default function CandlestickChart({ candles, symbol = 'BTC/USD' }: Candle
                     yAxisId="price"
                     type="monotone" 
                     dataKey="sma20" 
-                    stroke="#ec4899" 
+                    stroke="#D2557A"
                     strokeWidth={1}
                     strokeDasharray="5 5"
                     dot={false}

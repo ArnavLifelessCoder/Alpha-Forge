@@ -41,7 +41,7 @@ export default function PortfolioWidget({ portfolio }: PortfolioWidgetProps) {
       {/* Total Value */}
       <div className="mb-4">
         <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Total Value</p>
-        <p className="text-2xl font-bold text-white">
+        <p className="text-2xl font-bold text-ink">
           ${(portfolio.totalValue || 100000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
         <div className={`flex items-center space-x-1 mt-1 text-xs ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>

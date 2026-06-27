@@ -1,16 +1,19 @@
 import { MatchingEngine } from '../engine/MatchingEngine';
 import { Trade, OrderType, OrderSide } from '../types';
+import { MLClient } from '../ml/MLClient';
 
 /**
- * AI Trading Bot - Multi-Strategy Intelligent Trading System
- * 
- * Strategies:
- * 1. Mean Reversion (RSI-based)
- * 2. Momentum (MACD / EMA crossover)
- * 3. Breakout (Bollinger Band)
- * 4. Market Making (spread capture)
- * 
- * Risk: Kelly sizing, stop-loss, max drawdown circuit breaker
+ * AI Trading Bot — ML-driven with a heuristic safety net.
+ *
+ * Primary signal: a trained LightGBM directional model served by the AlphaForge
+ * MLOps stack (see ml/). The bot polls live predictions via MLClient and trades
+ * on the model's edge, optionally confirmed by classical technical signals.
+ *
+ * Fallback (when the model server is offline): the original technical strategies
+ *   1. Mean Reversion (RSI)   2. Momentum (EMA crossover)
+ *   3. Breakout (Bollinger)   4. Market Making (spread capture)
+ *
+ * Risk: confidence-gated sizing, stop-loss / take-profit, drawdown circuit breaker.
  */
 
 interface BotTrade {
@@ -22,8 +25,16 @@ interface BotTrade {
   exitPrice?: number;
   pnl?: number;
   strategy: string;
+  source?: 'ml' | 'heuristic';
   timestamp: number;
   status: 'OPEN' | 'CLOSED' | 'STOPPED';
+}
+
+interface BotDecision {
+  action: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+  reason: string;
+  source: 'ml' | 'heuristic';
 }
 
 interface StrategySignal {
@@ -56,7 +67,19 @@ export class AITradingBot {
   private activeStrategies: string[] = ['mean_reversion', 'momentum', 'breakout', 'market_making'];
   private cooldowns: Map<string, number> = new Map();
 
+  // ML integration
+  private mlClient?: MLClient;
+  private mlTradeCount: number = 0;
+  private heuristicTradeCount: number = 0;
+  private lastModelVersion: string | null = null;
+  private readonly ML_MIN_CONFIDENCE = 0.12; // act on model only above this edge
+
   constructor() {}
+
+  /** Attach the model-serving client (call from server.ts). */
+  setMLClient(client: MLClient): void {
+    this.mlClient = client;
+  }
 
   /**
    * Register a symbol engine (call from server.ts)
@@ -127,9 +150,11 @@ export class AITradingBot {
       // Cooldown check
       if (Date.now() < (this.cooldowns.get(symbol) || 0)) continue;
 
-      // Get signals
-      const signals = this.getSignals(symbol, prices);
-      const decision = this.consensus(signals);
+      // Heuristic consensus (always computed as the safety net)
+      const heuristic = this.consensus(this.getSignals(symbol, prices));
+
+      // ML prediction is the primary signal when the model server is live
+      const decision = this.combineDecision(symbol, heuristic);
 
       if (decision.action !== 'HOLD' && decision.confidence >= 0.25) {
         this.trade(symbol, decision);
@@ -138,6 +163,32 @@ export class AITradingBot {
 
     // Check stop-loss / take-profit
     this.checkExits();
+  }
+
+  /**
+   * Blend the served ML prediction with the heuristic consensus. The model leads
+   * when available and confident; technical agreement boosts conviction. Falls
+   * back to pure heuristics when the model server is offline.
+   */
+  private combineDecision(symbol: string, heuristic: StrategySignal): BotDecision {
+    const ml = this.mlClient?.getPrediction(symbol);
+
+    if (ml && ml.direction !== 'FLAT' && ml.confidence >= this.ML_MIN_CONFIDENCE) {
+      this.lastModelVersion = ml.modelVersion;
+      const mlAction: 'BUY' | 'SELL' = ml.direction === 'UP' ? 'BUY' : 'SELL';
+      const agree = heuristic.action === mlAction;
+      const confidence = Math.min(0.6 * ml.confidence + (agree ? 0.4 * heuristic.confidence : 0.0), 0.99);
+      const reason = `ML ${ml.modelVersion ?? '?'} p=${ml.prob.toFixed(2)}` + (agree ? ' +TA' : '');
+      return { action: mlAction, confidence, reason, source: 'ml' };
+    }
+
+    // Model offline / low conviction → heuristic fallback
+    return {
+      action: heuristic.action,
+      confidence: heuristic.confidence,
+      reason: `TA: ${heuristic.reason} (model offline)`,
+      source: 'heuristic',
+    };
   }
 
   private getSignals(symbol: string, prices: number[]): StrategySignal[] {
@@ -227,7 +278,7 @@ export class AITradingBot {
 
   // ===== EXECUTION =====
 
-  private trade(symbol: string, decision: StrategySignal): void {
+  private trade(symbol: string, decision: BotDecision): void {
     const engine = this.engines.get(symbol);
     if (!engine) return;
 
@@ -264,10 +315,12 @@ export class AITradingBot {
           quantity: filledQty,
           entryPrice: avgPrice,
           strategy: decision.reason,
+          source: decision.source,
           timestamp: Date.now(),
           status: 'OPEN',
         });
 
+        if (decision.source === 'ml') this.mlTradeCount++; else this.heuristicTradeCount++;
         this.cooldowns.set(symbol, Date.now() + 5000);
         if (this.tradeLog.length > 500) this.tradeLog = this.tradeLog.slice(-500);
       }
@@ -380,6 +433,12 @@ export class AITradingBot {
       drawdown: this.getDrawdown(),
       peakCapital: this.peakCapital,
       activeStrategies: this.activeStrategies,
+      // ML integration status
+      mlEnabled: !!(this.mlClient && this.mlClient.available),
+      modelVersion: this.lastModelVersion,
+      mlTrades: this.mlTradeCount,
+      heuristicTrades: this.heuristicTradeCount,
+      signalSource: (this.mlClient && this.mlClient.available) ? 'ml' : 'heuristic',
       positions: Object.fromEntries(this.positions),
       recentTrades: this.tradeLog.slice(-20).reverse().map(t => {
         if (t.status === 'OPEN') {

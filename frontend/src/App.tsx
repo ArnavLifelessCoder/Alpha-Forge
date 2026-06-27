@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { wsService } from './services/WebSocketService';
 import { apiService } from './services/ApiService';
 import { OrderBook, Candle, Portfolio } from './types';
-import Header from './components/Header';
+import Header, { AppView } from './components/Header';
+import MLDashboard from './components/ml/MLDashboard';
 import MarketTicker from './components/MarketTicker';
 import CandlestickChart from './components/CandlestickChart';
 import OrderBookWidget from './components/OrderBookWidget';
@@ -17,6 +18,7 @@ const USER_ID = 'USER_1';
 
 function App() {
   const [connected, setConnected] = useState(false);
+  const [view, setView] = useState<AppView>('terminal');
   const [currentSymbol, setCurrentSymbol] = useState('BTC/USD');
   const [orderBook, setOrderBook] = useState<OrderBook>({ bids: [], asks: [] });
   const [candles, setCandles] = useState<Candle[]>([]);
@@ -128,11 +130,15 @@ function App() {
   const currentPrice = orderBook.asks?.[0]?.price || orderBook.bids?.[0]?.price || 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white">
-      <Header connected={connected} />
-      
+    <div className="min-h-screen bg-gradient-to-b from-canvas via-canvas to-[#EFEAE1] text-ink">
+      <Header connected={connected} view={view} onViewChange={setView} />
+
+      {view === 'ml' ? (
+        <MLDashboard />
+      ) : (
+      <>
       <MarketTicker currentSymbol={currentSymbol} onSymbolChange={handleSymbolChange} />
-      
+
       <StatsBar stats={stats} currentPrice={currentPrice} />
 
       <div className="container mx-auto px-4 py-4">
@@ -161,12 +167,14 @@ function App() {
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-slate-800 mt-8 py-4">
         <div className="container mx-auto px-4 text-center text-xs text-slate-500">
-          <p>Synthetic Exchange v2.0 — Real-Time Multi-Asset Trading Simulator</p>
-          <p className="mt-1">Built with React, TypeScript, Node.js, WebSocket • Live market data via CoinGecko API</p>
+          <p>AlphaForge — Real-Time Trading Platform with an End-to-End MLOps Spine</p>
+          <p className="mt-1">C++ feature &amp; inference engine • LightGBM + MLflow + FastAPI • React / TypeScript / Node.js</p>
         </div>
       </footer>
     </div>

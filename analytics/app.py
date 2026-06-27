@@ -55,6 +55,90 @@ def fetch_data(endpoint: str):
     return None
 
 
+def render_mlops():
+    """MLOps panel: champion model, live drift, accuracy, experiment leaderboard."""
+    st.subheader("🧠 MLOps — Model Intelligence")
+
+    status = fetch_data("/api/ml/status") or {}
+    if not status.get("available"):
+        st.info(
+            "Model server offline. Start the AlphaForge serving layer to see live model "
+            "metrics:  `uvicorn ml.serving.app:app --port 8090`"
+        )
+        return
+
+    info = fetch_data("/api/ml/model-info") or {}
+    drift = fetch_data("/api/ml/monitoring/drift") or {}
+    perf = fetch_data("/api/ml/monitoring/performance") or {}
+    experiments = fetch_data("/api/ml/experiments") or []
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        st.metric("Champion", info.get("champion_version", "—"))
+    with c2:
+        auc = info.get("auc")
+        st.metric("Validation AUC", f"{auc:.4f}" if auc is not None else "—")
+    with c3:
+        acc = info.get("accuracy")
+        st.metric("Val Accuracy", f"{acc*100:.1f}%" if acc is not None else "—")
+    with c4:
+        st.metric("Inference", "C++ engine" if info.get("infer_backend") == "cpp" else info.get("infer_backend", "—"))
+    with c5:
+        live_acc = perf.get("accuracy")
+        st.metric("Live Accuracy", f"{live_acc*100:.1f}%" if live_acc is not None else "—",
+                  help=f"over {perf.get('n', 0)} resolved predictions")
+
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown("**Feature Importance (gain)**")
+        imp = info.get("feature_importance", {})
+        if imp:
+            imp_df = pd.DataFrame(sorted(imp.items(), key=lambda kv: kv[1]), columns=["feature", "gain"])
+            fig = px.bar(imp_df, x="gain", y="feature", orientation="h",
+                         color="gain", color_continuous_scale="Indigo")
+            fig.update_layout(paper_bgcolor="#0f172a", plot_bgcolor="#1e293b",
+                              font_color="#e2e8f0", showlegend=False, height=320,
+                              coloraxis_showscale=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with right:
+        st.markdown(f"**Data Drift (PSI)** — status: `{drift.get('status', 'n/a')}`")
+        feats = drift.get("features", [])
+        if feats:
+            d_df = pd.DataFrame(feats)
+            colors = ["#ef4444" if p > 0.25 else "#eab308" if p > 0.1 else "#22c55e" for p in d_df["psi"]]
+            fig = go.Figure(go.Bar(x=d_df["feature"], y=d_df["psi"], marker_color=colors))
+            fig.add_hline(y=0.1, line_dash="dash", line_color="#eab308")
+            fig.add_hline(y=0.25, line_dash="dash", line_color="#ef4444")
+            fig.update_layout(paper_bgcolor="#0f172a", plot_bgcolor="#1e293b",
+                              font_color="#e2e8f0", height=320,
+                              xaxis=dict(tickangle=-40))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("No drift samples yet (needs a champion + live features).")
+
+    st.markdown("**Experiment Leaderboard**")
+    if experiments:
+        runs_df = pd.DataFrame(experiments)
+        cols = [c for c in ["model_version", "auc", "accuracy", "n_rows", "promoted"] if c in runs_df.columns]
+        show = runs_df[cols].copy()
+        if "auc" in show:
+            show["auc"] = show["auc"].map(lambda x: f"{x:.4f}" if pd.notna(x) else "—")
+        if "accuracy" in show:
+            show["accuracy"] = show["accuracy"].map(lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—")
+        if "promoted" in show:
+            show["promoted"] = show["promoted"].map(lambda x: "✅" if x else "—")
+        st.dataframe(show.rename(columns={
+            "model_version": "Version", "auc": "AUC", "accuracy": "Accuracy",
+            "n_rows": "Rows", "promoted": "Promoted",
+        }), use_container_width=True, hide_index=True)
+    else:
+        st.caption("No training runs recorded yet.")
+
+    st.divider()
+
+
 def main():
     # Header
     col1, col2, col3 = st.columns([3, 1, 1])
@@ -96,6 +180,9 @@ def main():
         st.error("Cannot connect to backend. Make sure the server is running on port 8080.")
         st.code("docker-compose up", language="bash")
         return
+
+    # MLOps panel first — the headline of the platform.
+    render_mlops()
 
     # Fetch all data
     stats = fetch_data("/api/stats")

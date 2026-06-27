@@ -90,7 +90,7 @@ export default function OrderPanel({ userId, onOrderSubmit, currentPrice, curren
             className={`py-2 px-3 rounded-md text-sm font-medium transition-all ${
               orderType === OrderType.LIMIT
                 ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
+                : 'text-slate-400 hover:text-ink'
             }`}
           >
             <Shield className="w-3 h-3 inline mr-1" />Limit
@@ -101,7 +101,7 @@ export default function OrderPanel({ userId, onOrderSubmit, currentPrice, curren
             className={`py-2 px-3 rounded-md text-sm font-medium transition-all ${
               orderType === OrderType.MARKET
                 ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
+                : 'text-slate-400 hover:text-ink'
             }`}
           >
             <Zap className="w-3 h-3 inline mr-1" />Market
@@ -116,7 +116,7 @@ export default function OrderPanel({ userId, onOrderSubmit, currentPrice, curren
             className={`py-2.5 px-4 rounded-lg font-semibold text-sm transition-all ${
               orderSide === OrderSide.BUY
                 ? 'bg-green-600 text-white shadow-lg shadow-green-600/20'
-                : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white'
+                : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-ink'
             }`}
           >
             BUY
@@ -127,7 +127,7 @@ export default function OrderPanel({ userId, onOrderSubmit, currentPrice, curren
             className={`py-2.5 px-4 rounded-lg font-semibold text-sm transition-all ${
               orderSide === OrderSide.SELL
                 ? 'bg-red-600 text-white shadow-lg shadow-red-600/20'
-                : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white'
+                : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-ink'
             }`}
           >
             SELL
@@ -143,7 +143,7 @@ export default function OrderPanel({ userId, onOrderSubmit, currentPrice, curren
               step="0.01"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-white text-sm font-mono"
+              className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-ink text-sm font-mono"
               required
             />
           </div>
@@ -158,7 +158,7 @@ export default function OrderPanel({ userId, onOrderSubmit, currentPrice, curren
             min="0.01"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-white text-sm font-mono"
+            className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-ink text-sm font-mono"
             required
           />
           {/* Quick quantity buttons */}
@@ -180,7 +180,7 @@ export default function OrderPanel({ userId, onOrderSubmit, currentPrice, curren
         <div className="bg-slate-900/30 rounded-lg p-3 space-y-1.5 text-xs border border-slate-700/30">
           <div className="flex justify-between">
             <span className="text-slate-400">Est. Total:</span>
-            <span className="font-bold text-white">${estimatedValue.toFixed(2)}</span>
+            <span className="font-bold text-ink">${estimatedValue.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-400">Market Price:</span>
